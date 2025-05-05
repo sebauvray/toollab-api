@@ -1,0 +1,18 @@
+meta {
+  name: update
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{base_url}}/api/users/11
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  first_name: modifierrrrr
+  last_name: modifififif
+  email: modifieer@gmaol.com
+  password: password
+}

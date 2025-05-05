@@ -1,0 +1,27 @@
+meta {
+  name: Get user by context
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://localhost/api/users/by-context?context_type=family&context_id=1&role_name=Responsible
+  body: none
+  auth: none
+}
+
+params:query {
+  context_type: family
+  context_id: 1
+  role_name: Responsible
+}
+
+body:json {
+  {  
+    params: {
+      context_type: 'school',
+      context_id: 1,
+      role_name: 'Teacher'
+    }
+  }
+}
