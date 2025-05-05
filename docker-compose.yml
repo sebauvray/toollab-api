@@ -16,9 +16,9 @@ services:
   api:
     container_name: ${CONTAINER_NAME_API:-api-toollab}
     image: php_toollab
-    env_file: .env
     build:
       context: ./docker/php/
+      target: dev
     volumes:
       - ./:/var/www
     restart: unless-stopped
