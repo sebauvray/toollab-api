@@ -1,0 +1,33 @@
+name: Deploy to Dev Server
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Push code to server via SSH
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            if [ ! -d "/var/www/github-dev/staging/backend/.git" ]; then
+              echo "📦 Cloning repository..."
+              git clone git@github.com:your-user/your-repo.git /var/www/github-dev/staging/backend
+              cd /var/www/github-dev/staging/backend
+              git checkout dev
+            else
+              cd /var/www/github-dev/staging/backend
+              echo "🔄 Pulling latest changes from dev branch..."
+              git pull origin dev
+            fi
