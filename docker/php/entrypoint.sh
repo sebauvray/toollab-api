@@ -2,58 +2,58 @@
 
 echo "🎶 DEV mode: Installing dependencies..."
 
-# Charger les variables du .env dans l'environnement shell
+# Load variables from the .env file into the shell environment
 if [ -f .env ]; then
-    echo "🔄 Chargement des variables du .env dans l'environnement..."
+    echo "🔄 Loading variables from .env into the environment..."
     export $(grep -v '^#' .env | xargs)
 fi
 
-# Installer les dépendances PHP à chaque démarrage
+# Install PHP dependencies at each startup
 composer install
 
-# Vérifier si APP_KEY est définie dans le .env (en lisant directement le fichier)
+# Check if APP_KEY is set in .env (reading the file directly)
 APP_KEY_VALUE=$(grep ^APP_KEY= .env | cut -d '=' -f2-)
 
 if [ -z "$APP_KEY_VALUE" ]; then
-    echo "🔑 APP_KEY non trouvée dans .env, génération en cours..."
+    echo "🔑 APP_KEY not found in .env, generating a new one..."
     php artisan key:generate
 else
-    echo "✅ APP_KEY déjà définie dans .env."
+    echo "✅ APP_KEY is already set in .env."
 fi
 
-# Vérifier si DB_HOST et DB_DATABASE sont définis
+# Check if CONTAINER_NAME_DB and DB_DATABASE are set
 if [ -n "$CONTAINER_NAME_DB" ] && [ -n "$DB_DATABASE" ]; then
-    echo "🔎 Vérification de l'existence de la base '$DB_DATABASE' sur l'hôte '$CONTAINER_NAME_DB'..."
+    echo "🔎 Checking existence of the database '$DB_DATABASE' on host '$CONTAINER_NAME_DB'..."
 
-    # Tester si la DB existe
+    # Test if the database exists
     mysql -h"${CONTAINER_NAME_DB}" -u"${DB_USERNAME}" -p"${DB_PASSWORD}" -e "USE \`${DB_DATABASE}\`;"
 
     if [ $? -eq 0 ]; then
-        echo "✅ La base '$DB_DATABASE' existe."
+        echo "✅ The database '$DB_DATABASE' exists."
 
-        # Compter le nombre de tables dans la base
+        # Count the number of tables in the database
         TABLE_COUNT=$(mysql -h"${CONTAINER_NAME_DB}" -u"${DB_USERNAME}" -p"${DB_PASSWORD}" -D "${DB_DATABASE}" -sse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '${DB_DATABASE}';")
 
-        echo "📊 La base '$DB_DATABASE' contient $TABLE_COUNT tables."
+        echo "📊 The database '$DB_DATABASE' contains $TABLE_COUNT tables."
 
         if [ "$TABLE_COUNT" -eq 0 ]; then
-            echo "⚠️ Aucune table trouvée, lancement des migrations..."
+            echo "⚠️ No tables found, running migrations..."
             php artisan migrate --force
         else
-            echo "✅ Tables déjà présentes, aucune migration nécessaire."
+            echo "✅ Tables are already present, no migration needed."
         fi
     else
-        echo "⚠️ La base '$DB_DATABASE' n'existe pas. Laravel se chargera de gérer ça si nécessaire."
+        echo "⚠️ The database '$DB_DATABASE' does not exist. Laravel will handle this if needed."
     fi
 else
-    echo "⚠️ Variables DB_HOST ou DB_DATABASE non définies, saut de la vérification DB."
+    echo "⚠️ Variables CONTAINER_NAME_DB or DB_DATABASE are not set, skipping DB check."
 fi
 
-# Clear et regen cache config (utile en dev)
+# Clear and regenerate config cache (useful in dev)
 php artisan config:clear
 php artisan config:cache
 
 echo "✅ DEV ready."
 
-# Lancer php-fpm
+# Start php-fpm
 exec php-fpm
