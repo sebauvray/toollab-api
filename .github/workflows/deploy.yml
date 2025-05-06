@@ -1,16 +1,10 @@
-name: Manual Deploy
+name: Auto Deploy to Server
 
 on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Choose environment (dev or prod)'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - prod
+  push:
+    branches:
+      - dev
+      - main
 
 jobs:
   deploy:
@@ -20,7 +14,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Deploy to server
+      - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -28,10 +22,26 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script: |
-            if [ "${{ github.event.inputs.environment }}" = "dev" ]; then
-              echo "Deploying to DEV..."
-              rsync -avz --delete --exclude=".git*" --exclude=".github" ./ /home/githubdev/staging/api
+            echo "⚙️ Deploying branch: ${{ github.ref_name }}"
+
+            if [ "${{ github.ref_name }}" = "dev" ]; then
+              echo "🚀 Deploying to STAGING..."
+
+              # Clean the existing directory to avoid nesting issues
+              rm -rf /home/githubdev/staging/api/*
+
+              # Sync the content of the repo (no .git, no .github)
+              rsync -avz --delete --exclude=".git*" --exclude=".github" ./ /home/githubdev/staging/api/
+
+            elif [ "${{ github.ref_name }}" = "main" ]; then
+              echo "🚀 Deploying to PRODUCTION..."
+
+              # Clean the existing directory to avoid nesting issues
+              rm -rf /home/githubdev/production/api/*
+
+              # Sync the content of the repo (no .git, no .github)
+              rsync -avz --delete --exclude=".git*" --exclude=".github" ./ /home/githubdev/production/api/
+
             else
-              echo "Deploying to PROD..."
-              rsync -avz --delete --exclude=".git*" --exclude=".github" ./ /home/githubdev/production/api
+              echo "⛔ Not a deployable branch. Skipping."
             fi
