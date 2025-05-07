@@ -1,4 +1,4 @@
-name: Manual Deploy to Server
+name: Rsync Deploy with Docker Compose
 
 on:
   workflow_dispatch:
@@ -20,7 +20,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Deploy to server via SSH
+      - name: Deploy with rsync
+        uses: burnett01/rsync-deployments@6.0.0
+        with:
+          switches: -avz --delete --exclude='.git*' --exclude='.github' --exclude='node_modules'
+          path: ./
+          remote_path: ${{ env.REMOTE_PATH }}
+          remote_host: ${{ secrets.SERVER_HOST }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SERVER_SSH_KEY }}
+        env:
+          REMOTE_PATH: |
+            ${{ 
+              github.event.inputs.environment == 'production' 
+              && '/home/githubdev/production/api' 
+              || '/home/githubdev/staging/api' 
+            }}
+
+      - name: Run Docker Compose on server
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -28,16 +45,5 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
-            echo "⚙️ Manual deploy to ${{ github.event.inputs.environment }}"
-
-            if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
-              TARGET_DIR="/home/githubdev/staging/api"
-            elif [ "${{ github.event.inputs.environment }}" = "production" ]; then
-              TARGET_DIR="/home/githubdev/production/api"
-            else
-              echo "⛔ Unknown environment. Exiting."
-              exit 1
-            fi
-
-            echo "🚀 Syncing code to $TARGET_DIR ..."
-            rsync -avz --delete --exclude=".git*" --exclude=".github" ./ $TARGET_DIR/
+            cd ${{ github.event.inputs.environment == 'production' && '/home/githubdev/production/api' || '/home/githubdev/staging/api' }}
+            docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
