@@ -29,15 +29,15 @@ services:
 
   db:
     container_name: ${CONTAINER_NAME_DB:-db-toollab}
-    image: mariadb:10.11
+    image: mariadb:11.4.5
     restart: unless-stopped
     ports:
       - "3306:3306"
     environment:
-      MYSQL_DATABASE: ${DB_DATABASE}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD_ROOT}
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD_ROOT}
     volumes:
       - db_data:/var/lib/mysql
     networks:
