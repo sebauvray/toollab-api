@@ -46,4 +46,4 @@ jobs:
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
             cd ${{ github.event.inputs.environment == 'production' && '/home/githubdev/production/api' || '/home/githubdev/staging/api' }}
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.yml -f docker-compose-prod.yml up -d
