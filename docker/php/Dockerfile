@@ -33,15 +33,14 @@ COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 # ========== STAGE DEV ==========
 FROM base AS dev
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+USER $CURRENT_USER
 
 CMD ["entrypoint.sh"]
 
-USER $CURRENT_USER
-
 # ========== STAGE PROD ==========
 FROM base AS prod
+
+USER $CURRENT_USER
 
 COPY . .
 
@@ -50,4 +49,3 @@ RUN composer install --no-dev --optimize-autoloader \
 
 CMD ["php-fpm"]
 
-USER $CURRENT_USER
