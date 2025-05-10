@@ -1,1 +1,17 @@
-# TOOLLAB
+# API TOOLLAB
+
+To start the toollab API in a dev environment, first copy .env-example to .env
+
+```
+cp .env.example .env
+```
+
+And run 
+
+```
+docker compose up -d
+```
+
+Command to be made in the project folder.
+
+And that's it.
