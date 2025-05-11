@@ -41,3 +41,5 @@ docker compose up -d
 Command to be made in the project folder.
 
 And that's it.
+
+Projet run at http://localhost:8000/
