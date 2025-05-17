@@ -46,6 +46,13 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - web
+      
+  maildev:
+    image: maildev/maildev
+    profiles: ["dev"]
+    ports:
+      - "1080:1080"
+      - "1025:1025"
 
 networks:
   web:
