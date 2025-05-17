@@ -1,1 +1,45 @@
-# TOOLLAB
+# API TOOLLAB
+
+To start the toollab API in a dev environment, first copy .env-example to .env
+
+```
+cp .env.example .env
+```
+
+Change information on .env with yours 
+
+```
+CURRENT_USER=githubdev
+CURRENT_UID=1002
+CURRENT_GID=1002
+```
+
+To find your username run this command line 
+
+```
+whoami
+```
+
+To find your UID run this command line
+
+```
+id -u
+```
+
+To find your GID run this command line
+
+```
+id -g
+```
+
+And run 
+
+```
+docker compose up -d
+```
+
+Command to be made in the project folder.
+
+And that's it.
+
+Projet run at http://localhost:8000/
