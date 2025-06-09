@@ -262,4 +262,72 @@ class UserController extends Controller
                 ];
             });
     }
+
+    public function searchStudents(Request $request)
+    {
+        $request->validate([
+            'query' => 'required|string|min:2|max:50'
+        ]);
+
+        $query = $request->input('query');
+
+        try {
+            $students = User::select([
+                'users.id',
+                'users.first_name',
+                'users.last_name',
+                'user_infos.value as birthdate',
+                'user_roles.roleable_id as family_id'
+            ])
+                ->join('user_roles', 'users.id', '=', 'user_roles.user_id')
+                ->join('roles', 'user_roles.role_id', '=', 'roles.id')
+                ->leftJoin('user_infos', function($join) {
+                    $join->on('users.id', '=', 'user_infos.user_id')
+                        ->where('user_infos.key', '=', 'birthdate');
+                })
+                ->where('roles.slug', 'student')
+                ->where('user_roles.roleable_type', 'family')
+                ->where(function($q) use ($query) {
+                    $q->where('users.first_name', 'LIKE', "%{$query}%")
+                        ->orWhere('users.last_name', 'LIKE', "%{$query}%")
+                        ->orWhereRaw("CONCAT(users.first_name, ' ', users.last_name) LIKE ?", ["%{$query}%"]);
+                })
+                ->orderBy('users.first_name')
+                ->orderBy('users.last_name')
+                ->limit(10)
+                ->get()
+                ->map(function($student) {
+                    return [
+                        'id' => $student->id,
+                        'first_name' => $student->first_name,
+                        'last_name' => $student->last_name,
+                        'full_name' => $student->first_name . ' ' . $student->last_name,
+                        'birthdate' => $student->birthdate,
+                        'birthdate_formatted' => $student->birthdate ?
+                            \Carbon\Carbon::parse($student->birthdate)->format('d/m/Y') : null,
+                        'family_id' => $student->family_id,
+                        'display_text' => $student->first_name . ' ' . $student->last_name .
+                            ($student->birthdate ? ' - ' . \Carbon\Carbon::parse($student->birthdate)->format('d/m/Y') : '')
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'students' => $students,
+                    'total' => $students->count()
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Erreur lors de la recherche',
+                'data' => [
+                    'students' => [],
+                    'total' => 0
+                ]
+            ], 500);
+        }
+    }
 }
