@@ -1,15 +1,34 @@
 services:
-  nginx:
+  nuxt:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+      target: prod
+    ports: []
+    volumes: !reset []
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.web_toollab.rule=Host(`api.toollab.fr`)"
-      - "traefik.http.routers.web_toollab.entrypoints=web,websecure"
-      - "traefik.http.routers.web_toollab.tls=true"
-      - "traefik.http.routers.web_toollab.tls.certresolver=myresolver"
-      - "traefik.http.middlewares.web_toollab-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.web_toollab.middlewares=web_toollab-redirect"
-  api:
-    volumes: []
+
+      # ROUTER PRINCIPAL (toollab.fr)
+      - "traefik.http.routers.front_toollab.rule=Host(`toollab.fr`)"
+      - "traefik.http.routers.front_toollab.entrypoints=web,websecure"
+      - "traefik.http.routers.front_toollab.tls=true"
+      - "traefik.http.routers.front_toollab.tls.certresolver=myresolver"
+
+      # MIDDLEWARE DE REDIRECTION www => apex
+      - "traefik.http.middlewares.redirect-www.redirectregex.regex=^https?://www\\.toollab\\.fr/(.*)"
+      - "traefik.http.middlewares.redirect-www.redirectregex.replacement=https://toollab.fr/$$1"
+      - "traefik.http.middlewares.redirect-www.redirectregex.permanent=true"
+
+      # ROUTER pour www.toollab.fr qui applique la redirection
+      - "traefik.http.routers.redirect_www.rule=Host(`www.toollab.fr`)"
+      - "traefik.http.routers.redirect_www.entrypoints=web,websecure"
+      - "traefik.http.routers.redirect_www.middlewares=redirect-www"
+      - "traefik.http.routers.redirect_www.tls=true"
+      - "traefik.http.routers.redirect_www.tls.certresolver=myresolver"
+
+    networks:
+      - web
 
 networks:
   web:
