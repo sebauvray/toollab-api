@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ClassroomController;
+use App\Http\Controllers\Api\CursusController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\SchoolController;
@@ -36,7 +38,6 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::put('/{user}/info', [UserController::class, 'updateUserInfo']);
     });
 
-    // Routes pour le personnel
     Route::post('/users/create-staff', [StaffController::class, 'createStaffUser']);
     Route::post('/users/remove-role', [StaffController::class, 'removeUserRole']);
     Route::post('/users/change-password', [UserPasswordController::class, 'changePassword']);
@@ -48,6 +49,22 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
         Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
         Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
+    });
+
+    Route::prefix('cursus')->group(function () {
+        Route::get('/', [CursusController::class, 'index']);
+        Route::post('/', [CursusController::class, 'store']);
+        Route::get('/{cursus}', [CursusController::class, 'show']);
+        Route::put('/{cursus}', [CursusController::class, 'update']);
+        Route::delete('/{cursus}', [CursusController::class, 'destroy']);
+    });
+
+    Route::prefix('classrooms')->group(function () {
+        Route::get('/', [ClassroomController::class, 'index']);
+        Route::post('/', [ClassroomController::class, 'store']);
+        Route::get('/{classroom}', [ClassroomController::class, 'show']);
+        Route::put('/{classroom}', [ClassroomController::class, 'update']);
+        Route::delete('/{id}', [ClassroomController::class, 'destroy']);
     });
 
     Route::prefix('schools')->group(function () {
