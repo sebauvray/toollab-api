@@ -290,7 +290,11 @@ class UserController extends Controller
                 ->where(function($q) use ($query) {
                     $q->where('users.first_name', 'LIKE', "%{$query}%")
                         ->orWhere('users.last_name', 'LIKE', "%{$query}%")
-                        ->orWhereRaw("CONCAT(users.first_name, ' ', users.last_name) LIKE ?", ["%{$query}%"]);
+                        ->orWhereRaw("CONCAT(users.first_name, ' ', users.last_name) LIKE ?", ["%{$query}%"])
+                        ->orWhereRaw("CONCAT(users.last_name, ' ', users.first_name) LIKE ?", ["%{$query}%"])
+                        ->orWhere('user_infos.value', 'LIKE', "%{$query}%")
+                        ->orWhereRaw("DATE_FORMAT(user_infos.value, '%d/%m') LIKE ?", ["%{$query}%"])
+                        ->orWhereRaw("DATE_FORMAT(user_infos.value, '%d/%m/%Y') LIKE ?", ["%{$query}%"]);
                 })
                 ->orderBy('users.first_name')
                 ->orderBy('users.last_name')
