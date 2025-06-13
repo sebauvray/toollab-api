@@ -213,6 +213,7 @@ class FamilyController extends Controller
                     'first_name' => $user->first_name,
                     'last_name' => $user->last_name,
                     'birthdate' => $userInfos[self::KEY_BIRTHDATE] ?? null,
+                    'gender' => $userInfos['gender'] ?? null,
                     'is_responsible' => $this->isUserResponsible($user->id, $userRole->roleable_id),
                     'role' => $userRole->role->name,
                     'classroom' => $this->getUserClassroom($user->id),
