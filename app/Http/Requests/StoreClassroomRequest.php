@@ -6,19 +6,11 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreClassroomRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
@@ -30,14 +22,14 @@ class StoreClassroomRequest extends FormRequest
             'cursus_id' => 'required|exists:cursus,id',
             'level_id' => 'nullable|exists:cursus_levels,id',
             'gender' => 'required|in:Hommes,Femmes,Enfants,Mixte',
+            'schedule' => 'nullable|array',
+            'schedule.day' => 'required_with:schedule|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
+            'schedule.start_time' => 'required_with:schedule|date_format:H:i',
+            'schedule.end_time' => 'required_with:schedule|date_format:H:i|after:schedule.start_time',
+            'schedule.teacher_id' => 'nullable|exists:users,id'
         ];
     }
 
-    /**
-     * Get custom messages for validator errors.
-     *
-     * @return array
-     */
     public function messages(): array
     {
         return [
@@ -62,6 +54,16 @@ class StoreClassroomRequest extends FormRequest
 
             'gender.required' => 'Le genre est obligatoire.',
             'gender.in' => 'Le genre doit être l\'un des suivants : Hommes, Femmes, Enfants, Mixte.',
+
+            'schedule.array' => 'L\'horaire doit être un tableau.',
+            'schedule.day.required_with' => 'Le jour est obligatoire quand un horaire est défini.',
+            'schedule.day.in' => 'Le jour doit être un jour valide de la semaine.',
+            'schedule.start_time.required_with' => 'L\'heure de début est obligatoire quand un horaire est défini.',
+            'schedule.start_time.date_format' => 'L\'heure de début doit être au format HH:MM.',
+            'schedule.end_time.required_with' => 'L\'heure de fin est obligatoire quand un horaire est défini.',
+            'schedule.end_time.date_format' => 'L\'heure de fin doit être au format HH:MM.',
+            'schedule.end_time.after' => 'L\'heure de fin doit être après l\'heure de début.',
+            'schedule.teacher_id.exists' => 'L\'enseignant spécifié n\'existe pas.'
         ];
     }
 }
