@@ -20,6 +20,7 @@ Route::post('reset-password', [PasswordResetController::class, 'resetPassword'])
 Route::post('check-reset-token', [PasswordResetController::class, 'checkResetToken']);
 Route::post('/check-invitation-token', [InvitationController::class, 'checkInvitationToken']);
 Route::post('/set-password', [InvitationController::class, 'setPassword']);
+Route::post('/schools', [SchoolController::class, 'store']);
 
 Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
@@ -70,7 +71,6 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
     Route::prefix('schools')->group(function () {
         Route::get('/', [SchoolController::class, 'index']);
-        Route::post('/', [SchoolController::class, 'store']);
         Route::get('/{school}', [SchoolController::class, 'show']);
         Route::put('/{school}', [SchoolController::class, 'update']);
         Route::get('/{school}/families', [SchoolController::class, 'getAllFamiliesInSchool']);
