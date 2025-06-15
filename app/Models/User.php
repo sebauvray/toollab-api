@@ -13,11 +13,6 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, CanResetPassword;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'first_name',
         'last_name',
@@ -26,21 +21,11 @@ class User extends Authenticatable
         'access',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -77,12 +62,11 @@ class User extends Authenticatable
             ->withPivot('role_id');
     }
 
-    /**
-     * Send the password reset notification.
-     *
-     * @param  string  $token
-     * @return void
-     */
+    public function studentClassrooms()
+    {
+        return $this->hasMany(StudentClassroom::class, 'student_id');
+    }
+
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new CustomResetPasswordNotification($token));

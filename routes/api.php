@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
+use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserPasswordController;
 use App\Http\Controllers\PasswordResetController;
@@ -74,4 +75,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::put('/{school}', [SchoolController::class, 'update']);
         Route::get('/{school}/families', [SchoolController::class, 'getAllFamiliesInSchool']);
     });
+
+    Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
+    Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
+    Route::get('/families/{family}/enrollments', [StudentClassroomController::class, 'getFamilyEnrollments']);
 });

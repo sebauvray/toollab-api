@@ -7,6 +7,8 @@ use App\Models\Family;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserInfo;
+use App\Models\UserRole;
+use App\Models\StudentClassroom;
 use App\Traits\PaginationTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +22,6 @@ class FamilyController extends Controller
     const KEY_ZIPCODE = 'zipcode';
     const KEY_CITY = 'city';
     const KEY_BIRTHDATE = 'birthdate';
-
 
     public function index(Request $request)
     {
@@ -60,7 +61,7 @@ class FamilyController extends Controller
                     'email' => $user ? $user->email : null,
                     'address' => $userInfos[self::KEY_ADDRESS] ?? null,
                     'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
-                    'city' => $userInfos[self::KEY_CITY] ?? null,
+                    'city' => $userInfos[self::KEY_CITY] ?? null
                 ]
             ];
         });
@@ -79,44 +80,30 @@ class FamilyController extends Controller
         $request->validate([
             'firstname' => 'required|string|max:255',
             'lastname' => 'required|string|max:255',
-            'email' => 'required|email:rfc,dns|max:255',
-            'phone' => 'nullable|string|max:20',
-            'address' => 'nullable|string|max:255',
-            'zipcode' => 'nullable|string|max:20',
-            'city' => 'nullable|string|max:255',
-            'is_student' => 'boolean',
-            'birthdate' => 'nullable|date|required_if:is_student,true'
-        ], [
-            'email.email' => 'L\'adresse e-mail saisie n\'est pas valide.',
+            'email' => 'required|email|unique:users,email',
+            'phone' => 'nullable|string',
+            'address' => 'nullable|string',
+            'zipcode' => 'nullable|string',
+            'city' => 'nullable|string',
+            'birthdate' => 'nullable|date',
+            'is_student' => 'boolean'
         ]);
 
-        $user = User::where('email', $request->email)->first();
-        $responsibleRole = Role::where('slug', 'responsible')->first();
-
         DB::beginTransaction();
-        try {
-            if ($user) {
-                $isAlreadyResponsible = $user->roles()
-                    ->whereHas('role', function ($query) {
-                        $query->where('slug', 'responsible');
-                    })
-                    ->exists();
 
-                if ($isAlreadyResponsible) {
-                    DB::rollBack();
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Cette adresse email est déjà associée à un responsable de famille'
-                    ], 422);
-                }
-            } else {
-                $user = User::create([
-                    'first_name' => $request->firstname,
-                    'last_name' => $request->lastname,
-                    'email' => $request->email,
-                    'password' => Hash::make(uniqid()),
-                    'access' => false,
-                ]);
+        try {
+            $user = User::create([
+                'first_name' => $request->firstname,
+                'last_name' => $request->lastname,
+                'email' => $request->email,
+                'password' => Hash::make($request->password ?? str()->random(12)),
+                'access' => true
+            ]);
+
+            $responsibleRole = Role::where('slug', 'responsible')->first();
+
+            if (!$responsibleRole) {
+                throw new \Exception('Role responsible not found');
             }
 
             $this->updateOrCreateUserInfo($user, self::KEY_PHONE, $request->phone);
@@ -171,6 +158,7 @@ class FamilyController extends Controller
             ], 500);
         }
     }
+
     public function show(Family $family)
     {
         $responsibles = $family->userRoles()
@@ -198,15 +186,21 @@ class FamilyController extends Controller
             });
 
         $students = $family->userRoles()
-            ->with(['user', 'user.infos', 'role'])
+            ->with(['user', 'user.infos', 'role', 'user.studentClassrooms.classroom'])
             ->whereHas('role', function ($query) {
                 $query->where('slug', 'student');
             })
             ->get()
-            ->map(function ($userRole) {
+            ->map(function ($userRole) use ($family) {
                 $user = $userRole->user;
 
                 $userInfos = collect($user->infos)->pluck('value', 'key')->toArray();
+
+                $activeClassroom = $user->studentClassrooms()
+                    ->where('family_id', $family->id)
+                    ->where('status', 'active')
+                    ->with('classroom')
+                    ->first();
 
                 return [
                     'id' => $user->id,
@@ -216,7 +210,7 @@ class FamilyController extends Controller
                     'gender' => $userInfos['gender'] ?? null,
                     'is_responsible' => $this->isUserResponsible($user->id, $userRole->roleable_id),
                     'role' => $userRole->role->name,
-                    'classroom' => $this->getUserClassroom($user->id),
+                    'classroom' => $activeClassroom ? $activeClassroom->classroom : null,
                     'created_at' => $userRole->created_at
                 ];
             });
@@ -247,6 +241,7 @@ class FamilyController extends Controller
             ]
         ]);
     }
+
     public function addComment(Request $request, Family $family)
     {
         $request->validate([
@@ -269,63 +264,65 @@ class FamilyController extends Controller
         $authorName = 'Utilisateur';
         if ($comment->user) {
             $authorName = $comment->user->first_name . ' ' . $comment->user->last_name;
-        } elseif ($request->has('author_name')) {
-            $authorName = $request->author_name;
         }
 
         return response()->json([
             'status' => 'success',
             'message' => 'Commentaire ajouté avec succès',
             'data' => [
-                'comment' => [
-                    'id' => $comment->id,
-                    'content' => $comment->content,
-                    'author' => $authorName,
-                    'date' => $comment->created_at->format('d/m/Y'),
-                    'created_at' => $comment->created_at
-                ]
+                'id' => $comment->id,
+                'content' => $comment->content,
+                'author' => $authorName,
+                'date' => $comment->created_at->format('d/m/Y'),
+                'created_at' => $comment->created_at
             ]
         ]);
     }
+
     public function addStudents(Request $request, Family $family)
     {
         $request->validate([
             'students' => 'required|array',
             'students.*.firstname' => 'required|string|max:255',
             'students.*.lastname' => 'required|string|max:255',
-            'students.*.birthdate' => 'required|date',
+            'students.*.birthdate' => 'nullable|date',
             'students.*.gender' => 'required|in:M,F'
         ]);
 
-        $studentRole = Role::where('slug', 'student')->first();
-
-        if (!$studentRole) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Le rôle d\'élève n\'existe pas'
-            ], 500);
-        }
-
-        $addedStudents = [];
-
         DB::beginTransaction();
+
         try {
+            $addedStudents = [];
+            $studentRole = Role::where('slug', 'student')->firstOrFail();
+
             foreach ($request->students as $studentData) {
+                $email = strtolower($studentData['firstname'] . '.' . $studentData['lastname'] . '.student.' . uniqid() . '@school.com');
+
                 $student = User::create([
                     'first_name' => $studentData['firstname'],
                     'last_name' => $studentData['lastname'],
-                    'email' => 'student_' . uniqid() . '@example.com',
-                    'password' => Hash::make(uniqid()),
-                    'access' => false,
+                    'email' => $email,
+                    'password' => bcrypt(str()->random(12)),
+                    'access' => true
                 ]);
 
-                $this->updateOrCreateUserInfo($student, self::KEY_BIRTHDATE, $studentData['birthdate']);
+                UserInfo::create([
+                    'user_id' => $student->id,
+                    'key' => 'birthdate',
+                    'value' => $studentData['birthdate']
+                ]);
 
-                $this->updateOrCreateUserInfo($student, 'gender', $studentData['gender']);
+                UserInfo::create([
+                    'user_id' => $student->id,
+                    'key' => 'gender',
+                    'value' => $studentData['gender']
+                ]);
 
-                $family->userRoles()->create([
+                UserRole::create([
                     'user_id' => $student->id,
                     'role_id' => $studentRole->id,
+                    'roleable_type' => 'family',
+                    'roleable_id' => $family->id
                 ]);
 
                 $addedStudents[] = $student;
@@ -336,10 +333,9 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => count($addedStudents) . ' élève(s) ajouté(s) avec succès',
-                'data' => [
-                    'students' => $addedStudents
-                ]
+                'data' => $addedStudents
             ]);
+
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
@@ -349,55 +345,64 @@ class FamilyController extends Controller
             ], 500);
         }
     }
+
     public function addResponsible(Request $request, Family $family)
     {
         $request->validate([
             'user_id' => 'required|exists:users,id'
         ]);
 
-        $responsibleRole = Role::where('slug', 'responsible')->first();
+        DB::beginTransaction();
 
-        if (!$responsibleRole) {
+        try {
+            $user = User::findOrFail($request->user_id);
+            $responsibleRole = Role::where('slug', 'responsible')->firstOrFail();
+
+            $existingRole = UserRole::where('user_id', $user->id)
+                ->where('roleable_type', 'family')
+                ->where('roleable_id', $family->id)
+                ->first();
+
+            if ($existingRole) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Cette personne fait déjà partie de la famille'
+                ], 400);
+            }
+
+            UserRole::create([
+                'user_id' => $user->id,
+                'role_id' => $responsibleRole->id,
+                'roleable_type' => 'family',
+                'roleable_id' => $family->id
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Responsable ajouté avec succès',
+                'data' => $family->load(['userRoles.user', 'userRoles.role'])
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'status' => 'error',
-                'message' => 'Le rôle de responsable n\'existe pas'
+                'message' => 'Une erreur est survenue',
+                'error' => $e->getMessage()
             ], 500);
         }
-
-        $user = User::find($request->user_id);
-
-        $isAlreadyResponsible = $family->userRoles()
-            ->where('user_id', $user->id)
-            ->where('role_id', $responsibleRole->id)
-            ->exists();
-
-        if ($isAlreadyResponsible) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Cet utilisateur est déjà responsable de cette famille'
-            ], 422);
-        }
-
-        $family->userRoles()->create([
-            'user_id' => $user->id,
-            'role_id' => $responsibleRole->id,
-        ]);
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Responsable ajouté avec succès',
-            'data' => [
-                'user' => $user
-            ]
-        ]);
     }
+
     private function getUserClassroom($userId)
     {
-        $userRole = DB::table('user_roles')
-            ->where('user_id', $userId)
+        $userRole = UserRole::where('user_id', $userId)
+            ->whereHas('role', function ($query) {
+                $query->where('slug', 'student');
+            })
             ->where('roleable_type', 'classroom')
-            ->join('classrooms', 'user_roles.roleable_id', '=', 'classrooms.id')
-            ->select('classrooms.id', 'classrooms.name')
+            ->with(['roleable'])
             ->first();
 
         return $userRole ? [
@@ -405,6 +410,7 @@ class FamilyController extends Controller
             'name' => $userRole->name
         ] : null;
     }
+
     private function isUserResponsible($userId, $familyId)
     {
         return DB::table('user_roles')
@@ -419,6 +425,7 @@ class FamilyController extends Controller
             })
             ->exists();
     }
+
     private function updateOrCreateUserInfo(User $user, $key, $value)
     {
         if (is_null($value) || $value === '') {
