@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cursus extends Model
 {
+    protected $table = 'cursus';
+
     use HasFactory;
 
     protected $fillable = [
@@ -25,7 +27,7 @@ class Cursus extends Model
 
     public function levels(): HasMany
     {
-        return $this->hasMany(Level::class);
+        return $this->hasMany(CursusLevel::class);
     }
 
     public function classrooms(): HasMany
