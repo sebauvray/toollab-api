@@ -32,7 +32,7 @@ class Classroom extends Model
 
     public function level()
     {
-        return $this->belongsTo(Level::class);
+        return $this->belongsTo(CursusLevel::class, 'level_id');
     }
 
     public function userRoles()
