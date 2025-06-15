@@ -6,37 +6,33 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCursusRequest;
 use App\Http\Requests\UpdateCursusRequest;
 use App\Models\Cursus;
-use App\Models\CursusLevel;
-use App\Traits\PaginationTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class CursusController extends Controller
 {
-    use PaginationTrait;
-
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
-        $query = Cursus::with('levels')
-            ->withCount('classrooms as class_count');
+        $query = Cursus::with(['levels', 'classrooms']);
 
         if ($request->has('school_id')) {
             $query->where('school_id', $request->school_id);
         }
 
-        $paginatedData = $this->paginateQuery($query, $request);
+        $perPage = $request->get('per_page', 10);
+        $cursuses = $query->paginate($perPage);
 
-        $formattedItems = collect($paginatedData['items'])->map(function ($cursus) {
+        $items = $cursuses->items();
+        $formattedItems = collect($items)->map(function ($cursus) {
             return [
                 'id' => $cursus->id,
                 'name' => $cursus->name,
                 'progression' => $cursus->progression,
                 'type' => $cursus->progression === 'levels' ? 'Par niveaux' : 'Continu',
-                'classCount' => $cursus->class_count,
+                'classCount' => $cursus->classrooms->count(),
                 'levels' => $cursus->levels->map(function ($level) {
                     return [
                         'id' => $level->id,
@@ -51,7 +47,12 @@ class CursusController extends Controller
             'status' => 'success',
             'data' => [
                 'items' => $formattedItems,
-                'pagination' => $paginatedData['pagination']
+                'pagination' => [
+                    'total' => $cursuses->total(),
+                    'per_page' => $cursuses->perPage(),
+                    'current_page' => $cursuses->currentPage(),
+                    'total_pages' => $cursuses->lastPage()
+                ]
             ]
         ]);
     }
@@ -70,13 +71,16 @@ class CursusController extends Controller
                 'name' => $validatedData['name'],
                 'progression' => $validatedData['progression'],
                 'school_id' => $validatedData['school_id'],
+                'levels_count' => $validatedData['progression'] === 'levels' ? $validatedData['levels_count'] : 0
             ]);
 
-            foreach ($validatedData['levels'] as $index => $levelData) {
-                $cursus->levels()->create([
-                    'name' => $levelData['name'],
-                    'order' => $index,
-                ]);
+            if ($validatedData['progression'] === 'levels' && isset($validatedData['levels_count'])) {
+                for ($i = 1; $i <= $validatedData['levels_count']; $i++) {
+                    $cursus->levels()->create([
+                        'name' => 'Niveau ' . $i,
+                        'order' => $i
+                    ]);
+                }
             }
 
             DB::commit();
@@ -132,49 +136,10 @@ class CursusController extends Controller
      */
     public function update(UpdateCursusRequest $request, Cursus $cursus)
     {
-        $validatedData = $request->validated();
-
         DB::beginTransaction();
 
         try {
-            // Update cursus
-            if (isset($validatedData['name'])) {
-                $cursus->name = $validatedData['name'];
-            }
-
-            if (isset($validatedData['progression'])) {
-                $cursus->progression = $validatedData['progression'];
-            }
-
-            $cursus->save();
-
-            // Update levels if provided
-            if (isset($validatedData['levels'])) {
-                $existingLevelIds = [];
-
-                foreach ($validatedData['levels'] as $index => $levelData) {
-                    if (isset($levelData['id'])) {
-                        // Update existing level
-                        $level = CursusLevel::findOrFail($levelData['id']);
-                        $level->name = $levelData['name'];
-                        $level->order = $index;
-                        $level->save();
-
-                        $existingLevelIds[] = $level->id;
-                    } else {
-                        // Create new level
-                        $level = $cursus->levels()->create([
-                            'name' => $levelData['name'],
-                            'order' => $index,
-                        ]);
-
-                        $existingLevelIds[] = $level->id;
-                    }
-                }
-
-                // Delete levels that are no longer in the list
-                $cursus->levels()->whereNotIn('id', $existingLevelIds)->delete();
-            }
+            $cursus->update($request->validated());
 
             DB::commit();
 
@@ -182,7 +147,7 @@ class CursusController extends Controller
                 'status' => 'success',
                 'message' => 'Cursus mis à jour avec succès',
                 'data' => [
-                    'cursus' => $cursus->fresh()->load('levels')
+                    'cursus' => $cursus->load('levels')
                 ]
             ]);
         } catch (\Exception $e) {
@@ -204,21 +169,14 @@ class CursusController extends Controller
         DB::beginTransaction();
 
         try {
-            // On récupère les classes associées pour pouvoir les supprimer
             $classrooms = $cursus->classrooms()->get();
 
             foreach ($classrooms as $classroom) {
-                // Supprime toutes les relations user_roles (donc les élèves dans cette classe)
                 $classroom->userRoles()->delete();
-
-                // Supprime la classe
                 $classroom->delete();
             }
 
-            // Supprime tous les niveaux de ce cursus
             $cursus->levels()->delete();
-
-            // Enfin, supprime le cursus
             $cursus->delete();
 
             DB::commit();

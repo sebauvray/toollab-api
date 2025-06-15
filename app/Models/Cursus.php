@@ -11,12 +11,11 @@ class Cursus extends Model
 {
     use HasFactory;
 
-    protected $table = 'cursus';
-
     protected $fillable = [
         'name',
         'progression',
         'school_id',
+        'levels_count'
     ];
 
     public function school(): BelongsTo
@@ -24,10 +23,9 @@ class Cursus extends Model
         return $this->belongsTo(School::class);
     }
 
-
     public function levels(): HasMany
     {
-        return $this->hasMany(CursusLevel::class)->orderBy('order');
+        return $this->hasMany(Level::class);
     }
 
     public function classrooms(): HasMany
