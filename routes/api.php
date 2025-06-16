@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\TarificationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
@@ -79,4 +80,17 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
     Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
     Route::get('/families/{family}/enrollments', [StudentClassroomController::class, 'getFamilyEnrollments']);
+
+
+    Route::prefix('tarification')->group(function () {
+        Route::get('/cursus', [TarificationController::class, 'index']);
+        Route::post('/cursus/{cursus}/tarif', [TarificationController::class, 'updateTarif']);
+        Route::post('/cursus/{cursus}/reduction-familiale', [TarificationController::class, 'storeReductionFamiliale']);
+        Route::put('/reduction-familiale/{reduction}', [TarificationController::class, 'updateReductionFamiliale']);
+        Route::delete('/reduction-familiale/{reduction}', [TarificationController::class, 'deleteReductionFamiliale']);
+        Route::post('/cursus/{cursus}/reduction-multi-cursus', [TarificationController::class, 'storeReductionMultiCursus']);
+        Route::put('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'updateReductionMultiCursus']);
+        Route::delete('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'deleteReductionMultiCursus']);
+        Route::post('/calculer', [TarificationController::class, 'calculerTarifs']);
+    });
 });

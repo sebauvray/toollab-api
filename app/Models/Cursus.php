@@ -4,34 +4,55 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cursus extends Model
 {
-    protected $table = 'cursus';
-
     use HasFactory;
 
     protected $fillable = [
         'name',
-        'progression',
+        'description',
+        'is_active',
         'school_id',
-        'levels_count'
+        'progression'
     ];
 
-    public function school(): BelongsTo
+    protected $casts = [
+        'is_active' => 'boolean'
+    ];
+
+    public function school()
     {
         return $this->belongsTo(School::class);
     }
 
-    public function levels(): HasMany
-    {
-        return $this->hasMany(CursusLevel::class);
-    }
-
-    public function classrooms(): HasMany
+    public function classrooms()
     {
         return $this->hasMany(Classroom::class);
+    }
+
+    public function levels()
+    {
+        return $this->belongsToMany(Level::class, 'cursus_levels');
+    }
+
+    public function tarif()
+    {
+        return $this->hasOne(Tarif::class)->where('actif', true);
+    }
+
+    public function reductionsFamiliales()
+    {
+        return $this->hasMany(ReductionFamiliale::class)->where('actif', true)->orderBy('nombre_eleves_min');
+    }
+
+    public function reductionsMultiCursusBeneficiaire()
+    {
+        return $this->hasMany(ReductionMultiCursus::class, 'cursus_beneficiaire_id')->where('actif', true);
+    }
+
+    public function reductionsMultiCursusRequis()
+    {
+        return $this->hasMany(ReductionMultiCursus::class, 'cursus_requis_id')->where('actif', true);
     }
 }
