@@ -30,13 +30,13 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
-USER $CURRENT_USER
-
 # ========== STAGE DEV ==========
 FROM base AS dev
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER $CURRENT_USER
 
 CMD ["entrypoint.sh"]
 
