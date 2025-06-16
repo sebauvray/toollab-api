@@ -9,6 +9,7 @@ services:
       - "traefik.http.middlewares.web_toollab-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.web_toollab.middlewares=web_toollab-redirect"
   api:
+    target: prod
     volumes: []
 
 networks:
