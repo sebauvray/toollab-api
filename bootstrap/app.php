@@ -48,6 +48,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // Handling other exceptions
         $exceptions->render(function (Throwable $e, Request $request) {
             if ($request->is('api/*') && env('APP_ENV') === 'production') {
+                $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
+
                 // Hide some internal errors
                 if (
                     $e instanceof ValidationException ||
@@ -57,7 +59,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     return response()->json([
                         'status' => 'error',
                         'message' => $e->getMessage()
-                    ], $this->getStatusCode($e));
+                    ], $status);
                 }
 
                 // For all other errors, return a generic message
@@ -67,4 +69,3 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 500);
             }
         });
-    })->create();
