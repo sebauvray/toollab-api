@@ -20,12 +20,24 @@ class TarificationController extends Controller
         $this->tarifCalculator = $tarifCalculator;
     }
 
+    private function getUserSchoolId($user)
+    {
+        $userRole = $user->roles()
+            ->where('roleable_type', 'school')
+            ->whereHas('role', function ($query) {
+                $query->where('name', 'Directeur');
+            })
+            ->first();
+
+        return $userRole ? $userRole->roleable_id : null;
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé. Seuls les directeurs peuvent accéder à cette section.'
@@ -71,9 +83,9 @@ class TarificationController extends Controller
     public function updateTarif(Request $request, Cursus $cursus)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $cursus->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -100,9 +112,9 @@ class TarificationController extends Controller
     public function storeReductionFamiliale(Request $request, Cursus $cursus)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $cursus->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -131,9 +143,9 @@ class TarificationController extends Controller
     public function updateReductionFamiliale(Request $request, ReductionFamiliale $reduction)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $reduction->cursus->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -156,9 +168,9 @@ class TarificationController extends Controller
     public function deleteReductionFamiliale(Request $request, ReductionFamiliale $reduction)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $reduction->cursus->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -176,9 +188,9 @@ class TarificationController extends Controller
     public function storeReductionMultiCursus(Request $request, Cursus $cursus)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $cursus->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -186,7 +198,7 @@ class TarificationController extends Controller
         }
 
         $request->validate([
-            'cursus_requis_id' => 'required|exists:cursuses,id',
+            'cursus_requis_id' => 'required|exists:cursus,id',
             'pourcentage_reduction' => 'required|numeric|min:0|max:100'
         ]);
 
@@ -218,9 +230,9 @@ class TarificationController extends Controller
     public function updateReductionMultiCursus(Request $request, ReductionMultiCursus $reduction)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $reduction->cursusBeneficiaire->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -242,9 +254,9 @@ class TarificationController extends Controller
     public function deleteReductionMultiCursus(Request $request, ReductionMultiCursus $reduction)
     {
         $user = $request->user();
-        $schoolId = $request->header('X-School-Id');
+        $schoolId = $this->getUserSchoolId($user);
 
-        if (!$this->isDirector($user, $schoolId)) {
+        if (!$schoolId || $reduction->cursusBeneficiaire->school_id != $schoolId) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Accès non autorisé'
@@ -266,11 +278,14 @@ class TarificationController extends Controller
             'inscriptions' => 'required|array',
             'inscriptions.*.student_id' => 'required|exists:users,id',
             'inscriptions.*.classes' => 'required|array',
-            'inscriptions.*.classes.*.cursus_id' => 'required|exists:cursuses,id'
+            'inscriptions.*.classes.*.classroom_id' => 'required|exists:classrooms,id',
+            'inscriptions.*.classes.*.cursus_id' => 'required|exists:cursus,id'
         ]);
 
-        $family = \App\Models\Family::find($request->family_id);
-        $result = $this->tarifCalculator->calculerTotalFamille($family, $request->inscriptions);
+        $familyId = $request->family_id;
+        $inscriptionsData = $request->inscriptions;
+
+        $result = $this->tarifCalculator->calculerTarifsFamille($familyId, $inscriptionsData);
 
         return response()->json([
             'status' => 'success',
@@ -280,14 +295,12 @@ class TarificationController extends Controller
 
     private function isDirector($user, $schoolId)
     {
-        return true;
-
-     /*   return DB::table('user_roles')
-            ->join('roles', 'user_roles.role_id', '=', 'roles.id')
-            ->where('user_roles.user_id', $user->id)
-            ->where('user_roles.roleable_type', 'school')
-            ->where('user_roles.roleable_id', $schoolId)
-            ->where('roles.slug', 'director')
-            ->exists();*/
+        return $user->roles()
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $schoolId)
+            ->whereHas('role', function ($query) {
+                $query->where('name', 'Directeur');
+            })
+            ->exists();
     }
 }
