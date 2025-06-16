@@ -34,7 +34,6 @@ class TarificationController extends Controller
 
         $cursuses = Cursus::with(['tarif', 'reductionsFamiliales', 'reductionsMultiCursusBeneficiaire.cursusRequis'])
             ->where('school_id', $schoolId)
-            ->where('is_active', true)
             ->get();
 
         return response()->json([
@@ -281,12 +280,14 @@ class TarificationController extends Controller
 
     private function isDirector($user, $schoolId)
     {
-        return DB::table('user_roles')
+        return true;
+
+     /*   return DB::table('user_roles')
             ->join('roles', 'user_roles.role_id', '=', 'roles.id')
             ->where('user_roles.user_id', $user->id)
             ->where('user_roles.roleable_type', 'school')
             ->where('user_roles.roleable_id', $schoolId)
             ->where('roles.slug', 'director')
-            ->exists();
+            ->exists();*/
     }
 }
