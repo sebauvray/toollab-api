@@ -9,6 +9,8 @@ class Cursus extends Model
 {
     use HasFactory;
 
+    protected $table = 'cursus';
+
     protected $fillable = [
         'name',
         'description',
@@ -33,7 +35,7 @@ class Cursus extends Model
 
     public function levels()
     {
-        return $this->belongsToMany(Level::class, 'cursus_levels');
+        return $this->hasMany(CursusLevel::class);
     }
 
     public function tarif()
