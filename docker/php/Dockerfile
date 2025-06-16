@@ -30,25 +30,27 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
 USER $CURRENT_USER
 
 # ========== STAGE DEV ==========
 FROM base AS dev
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 CMD ["entrypoint.sh"]
 
 # ========== STAGE PROD ==========
 FROM base AS prod
 
-USER $CURRENT_USER
+USER root
 
 COPY . .
 
-RUN composer install --no-dev --optimize-autoloader \
-    && php artisan config:cache
+RUN chown -R $CURRENT_USER:$CURRENT_USER /var/www
+
+USER $CURRENT_USER
+
+RUN composer install
 
 CMD ["php-fpm"]
-

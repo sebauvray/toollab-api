@@ -6,7 +6,6 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
@@ -20,11 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // 404 error handling for specific models
         $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if ($request->is('api/*')) {
                 $model = $e->getPrevious()?->getModel();
-                if($model) {
+                if ($model) {
                     $modelName = match ($model) {
                         'App\Models\Classroom' => 'Classroom',
                         'App\Models\Comment' => 'Comment',
@@ -45,12 +43,10 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        // Handling other exceptions
         $exceptions->render(function (Throwable $e, Request $request) {
             if ($request->is('api/*') && env('APP_ENV') === 'production') {
                 $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
 
-                // Hide some internal errors
                 if (
                     $e instanceof ValidationException ||
                     $e instanceof \Illuminate\Auth\AuthenticationException ||
@@ -62,10 +58,11 @@ return Application::configure(basePath: dirname(__DIR__))
                     ], $status);
                 }
 
-                // For all other errors, return a generic message
                 return response()->json([
                     'status' => 'error',
                     'message' => 'The service encountered an issue. Please contact the administrator.'
                 ], 500);
             }
         });
+    })
+    ->create();

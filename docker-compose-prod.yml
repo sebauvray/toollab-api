@@ -10,8 +10,10 @@ services:
       - "traefik.http.routers.web_toollab.middlewares=web_toollab-redirect"
   api:
     build:
+      context: .
+      dockerfile: docker/php/Dockerfile
       target: prod
-    volumes: []
+    volumes: !reset []
 
 networks:
   web:
