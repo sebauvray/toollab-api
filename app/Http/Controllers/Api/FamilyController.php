@@ -23,6 +23,8 @@ class FamilyController extends Controller
     const KEY_CITY = 'city';
     const KEY_BIRTHDATE = 'birthdate';
 
+    const KEY_GENDER = 'gender';
+
     public function index(Request $request)
     {
         $query = Family::query();
@@ -85,8 +87,13 @@ class FamilyController extends Controller
             'address' => 'nullable|string',
             'zipcode' => 'nullable|string',
             'city' => 'nullable|string',
-            'birthdate' => 'nullable|date',
-            'is_student' => 'boolean'
+            'is_student' => 'boolean',
+            'birthdate' => 'required_if:is_student,true|nullable|date',
+            'gender' => 'required_if:is_student,true|nullable|in:M,F',
+        ], [
+            'birthdate.required_if' => 'La date de naissance est obligatoire pour les étudiants.',
+            'birthdate.date' => 'La date de naissance doit être une date valide.',
+            'gender.required_if' => 'Le genre est obligatoire pour les étudiants.',
         ]);
 
         DB::beginTransaction();
@@ -136,6 +143,7 @@ class FamilyController extends Controller
                     }
 
                     $this->updateOrCreateUserInfo($user, self::KEY_BIRTHDATE, $request->birthdate);
+                    $this->updateOrCreateUserInfo($user, self::KEY_GENDER, $request->gender);
                 }
             }
 
