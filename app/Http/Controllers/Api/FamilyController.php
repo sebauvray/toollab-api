@@ -269,7 +269,7 @@ class FamilyController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Commentaire ajouté avec succès',
-            'data' => [
+            'comment' => [
                 'id' => $comment->id,
                 'content' => $comment->content,
                 'author' => $authorName,
