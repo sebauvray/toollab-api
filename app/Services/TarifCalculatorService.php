@@ -5,12 +5,17 @@ namespace App\Services;
 use App\Models\Family;
 use App\Models\Cursus;
 use App\Models\User;
+use App\Models\StudentClassroom;
 use Illuminate\Support\Collection;
 
 class TarifCalculatorService
 {
-    public function calculerTotalFamille(Family $family, array $inscriptionsData): array
+    public function calculerTotalFamille(Family $family, array $inscriptionsData = null): array
     {
+        if ($inscriptionsData === null) {
+            $inscriptionsData = $this->getInscriptionsActives($family);
+        }
+
         $detailsParEleve = [];
         $totalFamille = 0;
 
@@ -29,52 +34,69 @@ class TarifCalculatorService
             foreach ($cursusIds as $cursusId) {
                 $cursus = Cursus::with(['tarif', 'reductionsFamiliales', 'reductionsMultiCursusBeneficiaire'])->find($cursusId);
 
-                if (!$cursus->tarif) continue;
-
-                $prixBase = $cursus->tarif->prix;
-                $reductions = [];
-
-                $reductionFamiliale = $this->calculerReductionFamiliale($cursus, $inscriptionsParCursus[$cursusId]);
-                if ($reductionFamiliale > 0) {
-                    $reductions[] = [
-                        'type' => 'familiale',
-                        'pourcentage' => $reductionFamiliale,
-                        'montant' => $prixBase * ($reductionFamiliale / 100)
-                    ];
+                if (!$cursus || !$cursus->tarif) {
+                    continue;
                 }
 
-                $reductionMultiCursus = $this->calculerReductionMultiCursus($cursus, $cursusIds);
-                if ($reductionMultiCursus > 0) {
-                    $reductions[] = [
-                        'type' => 'multi_cursus',
-                        'pourcentage' => $reductionMultiCursus,
-                        'montant' => $prixBase * ($reductionMultiCursus / 100)
-                    ];
-                }
+                $tarifBase = floatval($cursus->tarif->prix);
 
-                $totalReductionPourcentage = collect($reductions)->sum('pourcentage');
-                $totalReductionPourcentage = min($totalReductionPourcentage, 100);
+                $nombreElevesCursus = $this->countStudentsInCursus($inscriptionsParCursus, $cursusId);
+                $reductionFamiliale = $this->getReductionFamiliale($cursus, $nombreElevesCursus);
 
-                $prixFinal = $prixBase * (1 - $totalReductionPourcentage / 100);
+                $autresCursusEleve = $this->getAutresCursusEleve($inscriptionsData, $student->id, $cursusId);
+                $reductionMultiCursus = $this->getReductionMultiCursus($cursus, $autresCursusEleve);
+
+                $reduction = max($reductionFamiliale, $reductionMultiCursus);
+                $tarifFinal = $tarifBase * (1 - $reduction / 100);
 
                 $detailEleve['cursus'][] = [
-                    'cursus_id' => $cursus->id,
+                    'cursus_id' => $cursusId,
                     'cursus_name' => $cursus->name,
-                    'prix_base' => $prixBase,
-                    'reductions' => $reductions,
-                    'prix_final' => $prixFinal
+                    'tarif_base' => $tarifBase,
+                    'reduction_familiale' => $reductionFamiliale,
+                    'reduction_multi_cursus' => $reductionMultiCursus,
+                    'reduction_appliquee' => $reduction,
+                    'tarif_final' => round($tarifFinal, 2)
                 ];
 
-                $totalFamille += $prixFinal;
+                $totalFamille += $tarifFinal;
             }
 
             $detailsParEleve[] = $detailEleve;
         }
 
         return [
+            'total' => round($totalFamille, 2),
             'details_par_eleve' => $detailsParEleve,
-            'total_famille' => $totalFamille
+            'nombre_eleves' => count($inscriptionsData)
         ];
+    }
+
+    private function getInscriptionsActives(Family $family): array
+    {
+        $inscriptions = StudentClassroom::where('family_id', $family->id)
+            ->where('status', 'active')
+            ->with(['student', 'classroom.cursus'])
+            ->get()
+            ->groupBy('student_id');
+
+        $result = [];
+
+        foreach ($inscriptions as $studentId => $studentInscriptions) {
+            $classes = $studentInscriptions->map(function ($inscription) {
+                return [
+                    'classroom_id' => $inscription->classroom_id,
+                    'cursus_id' => $inscription->classroom->cursus_id
+                ];
+            })->toArray();
+
+            $result[] = [
+                'student_id' => $studentId,
+                'classes' => $classes
+            ];
+        }
+
+        return $result;
     }
 
     private function groupInscriptionsByCursus(array $inscriptionsData): array
@@ -82,9 +104,8 @@ class TarifCalculatorService
         $result = [];
 
         foreach ($inscriptionsData as $inscription) {
-            $cursusIds = collect($inscription['classes'])->pluck('cursus_id')->unique();
-
-            foreach ($cursusIds as $cursusId) {
+            foreach ($inscription['classes'] as $class) {
+                $cursusId = $class['cursus_id'];
                 if (!isset($result[$cursusId])) {
                     $result[$cursusId] = [];
                 }
@@ -92,31 +113,61 @@ class TarifCalculatorService
             }
         }
 
-        return $result;
+        return array_map(function ($students) {
+            return array_unique($students);
+        }, $result);
     }
 
-    private function calculerReductionFamiliale(Cursus $cursus, array $studentsInscrits): float
+    private function countStudentsInCursus(array $inscriptionsParCursus, int $cursusId): int
     {
-        $nombreEleves = count($studentsInscrits);
+        return isset($inscriptionsParCursus[$cursusId]) ? count($inscriptionsParCursus[$cursusId]) : 0;
+    }
 
-        $reductionApplicable = $cursus->reductionsFamiliales
+    private function getReductionFamiliale(Cursus $cursus, int $nombreEleves): float
+    {
+        if ($nombreEleves <= 1) {
+            return 0;
+        }
+
+        $reduction = $cursus->reductionsFamiliales
+            ->where('actif', true)
             ->where('nombre_eleves_min', '<=', $nombreEleves)
             ->sortByDesc('nombre_eleves_min')
             ->first();
 
-        return $reductionApplicable ? $reductionApplicable->pourcentage_reduction : 0;
+        return $reduction ? floatval($reduction->pourcentage_reduction) : 0;
     }
 
-    private function calculerReductionMultiCursus(Cursus $cursus, Collection $cursusIdsEleve): float
+    private function getAutresCursusEleve(array $inscriptionsData, int $studentId, int $cursusActuelId): array
     {
-        $reductionMax = 0;
+        $inscription = collect($inscriptionsData)->firstWhere('student_id', $studentId);
 
-        foreach ($cursus->reductionsMultiCursusBeneficiaire as $reduction) {
-            if ($cursusIdsEleve->contains($reduction->cursus_requis_id)) {
-                $reductionMax = max($reductionMax, $reduction->pourcentage_reduction);
-            }
+        if (!$inscription) {
+            return [];
         }
 
-        return $reductionMax;
+        return collect($inscription['classes'])
+            ->pluck('cursus_id')
+            ->unique()
+            ->reject(function ($cursusId) use ($cursusActuelId) {
+                return $cursusId == $cursusActuelId;
+            })
+            ->values()
+            ->toArray();
+    }
+
+    private function getReductionMultiCursus(Cursus $cursus, array $autresCursusIds): float
+    {
+        if (empty($autresCursusIds)) {
+            return 0;
+        }
+
+        $reduction = $cursus->reductionsMultiCursusBeneficiaire
+            ->where('actif', true)
+            ->whereIn('cursus_requis_id', $autresCursusIds)
+            ->sortByDesc('pourcentage_reduction')
+            ->first();
+
+        return $reduction ? floatval($reduction->pourcentage_reduction) : 0;
     }
 }

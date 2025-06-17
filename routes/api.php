@@ -93,4 +93,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::delete('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'deleteReductionMultiCursus']);
         Route::post('/calculer', [TarificationController::class, 'calculerTarifs']);
     });
+
+    Route::prefix('families/{family}/paiements')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\PaiementController::class, 'show']);
+        Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
+        Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
+        Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
+    });
 });
