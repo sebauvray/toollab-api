@@ -92,14 +92,22 @@ class PaiementController extends Controller
             ], 404);
         }
 
-        $request->validate([
+        $typePaiement = $ligne->type_paiement;
+
+        $rules = [
             'montant' => 'required|numeric|min:0.01',
-            'cheque' => 'required_if:type_paiement,cheque|array',
-            'cheque.banque' => 'required_if:type_paiement,cheque|string',
-            'cheque.numero' => 'required_if:type_paiement,cheque|string',
-            'cheque.nom_emetteur' => 'required_if:type_paiement,cheque|string',
-            'justification' => 'required_if:type_paiement,exoneration|string'
-        ]);
+        ];
+
+        if ($typePaiement === 'cheque') {
+            $rules['cheque'] = 'required|array';
+            $rules['cheque.banque'] = 'required|string';
+            $rules['cheque.numero'] = 'required|string';
+            $rules['cheque.nom_emetteur'] = 'required|string';
+        } elseif ($typePaiement === 'exoneration') {
+            $rules['justification'] = 'required|string';
+        }
+
+        $request->validate($rules);
 
         try {
             $details = $this->paiementService->getDetailsPaiement($family);
@@ -149,7 +157,7 @@ class PaiementController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' == 'Paiement supprimé avec succès',
+                'message' => 'Paiement supprimé avec succès',
                 'data' => [
                     'nouveau_total' => $details['montant_paye'],
                     'reste_a_payer' => $details['reste_a_payer']
