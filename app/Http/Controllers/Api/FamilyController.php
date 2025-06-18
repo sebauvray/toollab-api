@@ -232,11 +232,14 @@ class FamilyController extends Controller
 
                 $userInfos = collect($user->infos)->pluck('value', 'key')->toArray();
 
-                $activeClassroom = $user->studentClassrooms()
+                $activeClassrooms = $user->studentClassrooms()
                     ->where('family_id', $family->id)
                     ->where('status', 'active')
                     ->with('classroom')
-                    ->first();
+                    ->get()
+                    ->map(function ($studentClassroom) {
+                        return $studentClassroom->classroom;
+                    });
 
                 return [
                     'id' => $user->id,
@@ -246,7 +249,7 @@ class FamilyController extends Controller
                     'gender' => $userInfos['gender'] ?? null,
                     'is_responsible' => $this->isUserResponsible($user->id, $userRole->roleable_id),
                     'role' => $userRole->role->name,
-                    'classroom' => $activeClassroom ? $activeClassroom->classroom : null,
+                    'classrooms' => $activeClassrooms,
                     'created_at' => $userRole->created_at
                 ];
             });
@@ -398,6 +401,43 @@ class FamilyController extends Controller
             ], 500);
         }
     }
+
+    public function updateStudent(Request $request, Family $family, User $student)
+    {
+        $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'birthdate' => 'nullable|date',
+            'gender' => 'required|in:M,F'
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $student->first_name = $request->first_name;
+            $student->last_name = $request->last_name;
+            $student->save();
+
+            $this->updateOrCreateUserInfo($student, self::KEY_BIRTHDATE, $request->birthdate);
+            $this->updateOrCreateUserInfo($student, self::KEY_GENDER, $request->gender);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Élève mis à jour avec succès',
+                'data' => $student->refresh()
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Une erreur est survenue lors de la mise à jour de l\'élève',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
     public function addResponsible(Request $request, Family $family)
     {
