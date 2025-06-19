@@ -14,7 +14,7 @@ class ClassSchedule extends Model
         'day',
         'start_time',
         'end_time',
-        'teacher_id'
+        'teacher_name'
     ];
 
     protected $casts = [
@@ -25,11 +25,6 @@ class ClassSchedule extends Model
     public function classroom()
     {
         return $this->belongsTo(Classroom::class);
-    }
-
-    public function teacher()
-    {
-        return $this->belongsTo(User::class, 'teacher_id');
     }
 
     public function getFormattedTimeAttribute()

@@ -14,7 +14,7 @@ class ClassroomController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules.teacher']);
+        $query = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules']);
 
         if ($request->has('school_id')) {
             $query->where('school_id', $request->school_id);
@@ -29,8 +29,6 @@ class ClassroomController extends Controller
 
         $items = $classrooms->items();
         $formattedItems = collect($items)->map(function ($classroom) {
-            $schedule = $classroom->schedules->first();
-
             return [
                 'id' => $classroom->id,
                 'name' => $classroom->name,
@@ -41,14 +39,17 @@ class ClassroomController extends Controller
                 'size' => $classroom->size,
                 'student_count' => $classroom->student_count,
                 'available_spots' => $classroom->available_spots,
-                'schedule' => $schedule ? [
-                    'day' => $schedule->day,
-                    'time' => $schedule->formatted_time,
-                    'teacher' => $schedule->teacher ? [
-                        'id' => $schedule->teacher->id,
-                        'name' => $schedule->teacher->first_name . ' ' . $schedule->teacher->last_name
-                    ] : null
-                ] : null
+                'telegram_link' => $classroom->telegram_link,
+                'schedules' => $classroom->schedules->map(function ($schedule) {
+                    return [
+                        'id' => $schedule->id,
+                        'day' => $schedule->day,
+                        'start_time' => $schedule->start_time,
+                        'end_time' => $schedule->end_time,
+                        'formatted_time' => $schedule->formatted_time,
+                        'teacher_name' => $schedule->teacher_name
+                    ];
+                })
             ];
         });
 
@@ -72,8 +73,6 @@ class ClassroomController extends Controller
             $classroom = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules.teacher'])
                 ->findOrFail($id);
 
-            $schedule = $classroom->schedules->first();
-
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -86,11 +85,20 @@ class ClassroomController extends Controller
                     'size' => $classroom->size,
                     'student_count' => $classroom->student_count,
                     'available_spots' => $classroom->available_spots,
-                    'schedule' => $schedule ? [
-                        'day' => $schedule->day,
-                        'time' => $schedule->formatted_time,
-                        'teacher' => $schedule->teacher
-                    ] : null
+                    'telegram_link' => $classroom->telegram_link,
+                    'schedules' => $classroom->schedules->map(function ($schedule) {
+                        return [
+                            'id' => $schedule->id,
+                            'day' => $schedule->day,
+                            'start_time' => $schedule->start_time,
+                            'end_time' => $schedule->end_time,
+                            'formatted_time' => $schedule->formatted_time,
+                            'teacher' => $schedule->teacher ? [
+                                'id' => $schedule->teacher->id,
+                                'name' => $schedule->teacher->first_name . ' ' . $schedule->teacher->last_name
+                            ] : null
+                        ];
+                    })
                 ]
             ]);
 
@@ -116,16 +124,19 @@ class ClassroomController extends Controller
                 'gender' => $request->gender,
                 'type' => $request->type ?? 'Standard',
                 'school_id' => $request->school_id,
-                'years' => $request->years ?? date('Y')
+                'years' => $request->years ?? date('Y'),
+                'telegram_link' => $request->telegram_link
             ]);
 
-            if ($request->has('schedule')) {
-                $classroom->schedules()->create([
-                    'day' => $request->schedule['day'],
-                    'start_time' => $request->schedule['start_time'],
-                    'end_time' => $request->schedule['end_time'],
-                    'teacher_id' => $request->schedule['teacher_id'] ?? null
-                ]);
+            if ($request->has('schedules') && is_array($request->schedules)) {
+                foreach ($request->schedules as $scheduleData) {
+                    $classroom->schedules()->create([
+                        'day' => $scheduleData['day'],
+                        'start_time' => $scheduleData['start_time'],
+                        'end_time' => $scheduleData['end_time'],
+                        'teacher_name' => $scheduleData['teacher_name'] ?? null
+                    ]);
+                }
             }
 
             DB::commit();
@@ -133,7 +144,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Classe créée avec succès',
-                'data' => $classroom->load(['cursus', 'level', 'schedules.teacher'])
+                'data' => $classroom->load(['cursus', 'level', 'schedules'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -154,17 +165,62 @@ class ClassroomController extends Controller
         try {
             $classroom = Classroom::findOrFail($id);
 
-            $classroom->update($request->validated());
+            $classroom->update([
+                'name' => $request->name,
+                'cursus_id' => $request->cursus_id,
+                'level_id' => $request->level_id,
+                'size' => $request->size,
+                'gender' => $request->gender,
+                'type' => $request->type ?? $classroom->type,
+                'years' => $request->years ?? $classroom->years,
+                'telegram_link' => $request->telegram_link
+            ]);
 
-            if ($request->has('schedule')) {
-                $classroom->schedules()->delete();
+            if ($request->has('schedules') && is_array($request->schedules)) {
+                $existingScheduleIds = $classroom->schedules->pluck('id')->toArray();
+                $updatedScheduleIds = [];
 
-                $classroom->schedules()->create([
-                    'day' => $request->schedule['day'],
-                    'start_time' => $request->schedule['start_time'],
-                    'end_time' => $request->schedule['end_time'],
-                    'teacher_id' => $request->schedule['teacher_id'] ?? null
-                ]);
+                foreach ($request->schedules as $scheduleData) {
+                    if (isset($scheduleData['delete']) && $scheduleData['delete']) {
+                        if (isset($scheduleData['id'])) {
+                            ClassSchedule::where('id', $scheduleData['id'])
+                                ->where('classroom_id', $classroom->id)
+                                ->delete();
+                        }
+                        continue;
+                    }
+
+                    if (isset($scheduleData['id']) && $scheduleData['id']) {
+                        $schedule = ClassSchedule::where('id', $scheduleData['id'])
+                            ->where('classroom_id', $classroom->id)
+                            ->first();
+
+                        if ($schedule) {
+                            $schedule->update([
+                                'day' => $scheduleData['day'],
+                                'start_time' => $scheduleData['start_time'],
+                                'end_time' => $scheduleData['end_time'],
+                                'teacher_name' => $scheduleData['teacher_name'] ?? null
+                            ]);
+                            $updatedScheduleIds[] = $schedule->id;
+                        }
+                    } else {
+                        $newSchedule = $classroom->schedules()->create([
+                            'day' => $scheduleData['day'],
+                            'start_time' => $scheduleData['start_time'],
+                            'end_time' => $scheduleData['end_time'],
+                            'teacher_name' => $scheduleData['teacher_name'] ?? null
+                        ]);
+                        $updatedScheduleIds[] = $newSchedule->id;
+                    }
+                }
+
+                $schedulesToDelete = array_diff($existingScheduleIds, $updatedScheduleIds);
+                if (!empty($schedulesToDelete)) {
+                    ClassSchedule::whereIn('id', $schedulesToDelete)
+                        ->where('classroom_id', $classroom->id)
+                        ->delete();
+                }
             }
 
             DB::commit();
@@ -172,7 +228,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Classe mise à jour avec succès',
-                'data' => $classroom->fresh()->load(['cursus', 'level', 'schedules.teacher'])
+                'data' => $classroom->fresh()->load(['cursus', 'level', 'schedules'])
             ]);
 
         } catch (\Exception $e) {

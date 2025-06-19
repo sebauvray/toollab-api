@@ -22,11 +22,12 @@ class StoreClassroomRequest extends FormRequest
             'cursus_id' => 'required|exists:cursus,id',
             'level_id' => 'nullable|exists:cursus_levels,id',
             'gender' => 'required|in:Hommes,Femmes,Enfants,Mixte',
-            'schedule' => 'nullable|array',
-            'schedule.day' => 'required_with:schedule|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
-            'schedule.start_time' => 'required_with:schedule|date_format:H:i',
-            'schedule.end_time' => 'required_with:schedule|date_format:H:i|after:schedule.start_time',
-            'schedule.teacher_id' => 'nullable|exists:users,id'
+            'telegram_link' => 'nullable|string|max:500',
+            'schedules' => 'nullable|array',
+            'schedules.*.day' => 'required|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
+            'schedules.*.start_time' => 'required|date_format:H:i',
+            'schedules.*.end_time' => 'required|date_format:H:i|after:schedules.*.start_time',
+            'schedules.*.teacher_name' => 'nullable|string|max:255'
         ];
     }
 
@@ -55,15 +56,19 @@ class StoreClassroomRequest extends FormRequest
             'gender.required' => 'Le genre est obligatoire.',
             'gender.in' => 'Le genre doit être l\'un des suivants : Hommes, Femmes, Enfants, Mixte.',
 
-            'schedule.array' => 'L\'horaire doit être un tableau.',
-            'schedule.day.required_with' => 'Le jour est obligatoire quand un horaire est défini.',
-            'schedule.day.in' => 'Le jour doit être un jour valide de la semaine.',
-            'schedule.start_time.required_with' => 'L\'heure de début est obligatoire quand un horaire est défini.',
-            'schedule.start_time.date_format' => 'L\'heure de début doit être au format HH:MM.',
-            'schedule.end_time.required_with' => 'L\'heure de fin est obligatoire quand un horaire est défini.',
-            'schedule.end_time.date_format' => 'L\'heure de fin doit être au format HH:MM.',
-            'schedule.end_time.after' => 'L\'heure de fin doit être après l\'heure de début.',
-            'schedule.teacher_id.exists' => 'L\'enseignant spécifié n\'existe pas.'
+            'telegram_link.string' => 'Le lien Telegram doit être une chaîne de caractères.',
+            'telegram_link.max' => 'Le lien Telegram ne peut pas dépasser 500 caractères.',
+
+            'schedules.array' => 'Les horaires doivent être un tableau.',
+            'schedules.*.day.required' => 'Le jour est obligatoire pour chaque créneau.',
+            'schedules.*.day.in' => 'Le jour doit être un jour valide de la semaine.',
+            'schedules.*.start_time.required' => 'L\'heure de début est obligatoire.',
+            'schedules.*.start_time.date_format' => 'L\'heure de début doit être au format HH:MM.',
+            'schedules.*.end_time.required' => 'L\'heure de fin est obligatoire.',
+            'schedules.*.end_time.date_format' => 'L\'heure de fin doit être au format HH:MM.',
+            'schedules.*.end_time.after' => 'L\'heure de fin doit être après l\'heure de début.',
+            'schedules.*.teacher_name.string' => 'Le nom du professeur doit être une chaîne de caractères.',
+            'schedules.*.teacher_name.max' => 'Le nom du professeur ne peut pas dépasser 255 caractères.'
         ];
     }
 }

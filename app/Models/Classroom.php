@@ -10,15 +10,18 @@ class Classroom extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name',
         'school_id',
+        'name',
+        'years',
+        'type',
+        'size',
         'cursus_id',
         'level_id',
-        'size',
         'gender',
-        'type',
-        'years'
+        'telegram_link'
     ];
+
+    protected $appends = ['student_count', 'available_spots'];
 
     public function school()
     {
@@ -32,18 +35,13 @@ class Classroom extends Model
 
     public function level()
     {
-        return $this->belongsTo(CursusLevel::class, 'level_id');
-    }
-
-    public function userRoles()
-    {
-        return $this->hasMany(UserRole::class);
+        return $this->belongsTo(CursusLevel::class);
     }
 
     public function students()
     {
         return $this->belongsToMany(User::class, 'student_classrooms', 'classroom_id', 'student_id')
-            ->withPivot('status', 'enrollment_date', 'family_id')
+            ->withPivot('family_id', 'status', 'enrollment_date')
             ->withTimestamps();
     }
 
@@ -55,11 +53,6 @@ class Classroom extends Model
     public function schedules()
     {
         return $this->hasMany(ClassSchedule::class);
-    }
-
-    public function studentClassrooms()
-    {
-        return $this->hasMany(StudentClassroom::class);
     }
 
     public function getStudentCountAttribute()
@@ -74,6 +67,6 @@ class Classroom extends Model
 
     public function isFull()
     {
-        return $this->available_spots <= 0;
+        return $this->student_count >= $this->size;
     }
 }

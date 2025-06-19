@@ -6,37 +6,32 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateClassroomRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
-            'name' => 'sometimes|required|string|max:255',
-            'years' => 'sometimes|required|integer',
+            'name' => 'required|string|max:255',
+            'years' => 'required|integer',
             'type' => 'nullable|string|max:255',
-            'size' => 'sometimes|required|integer|min:1',
-            'cursus_id' => 'sometimes|required|exists:cursus,id',
+            'size' => 'required|integer|min:1',
+            'cursus_id' => 'required|exists:cursus,id',
             'level_id' => 'nullable|exists:cursus_levels,id',
-            'gender' => 'sometimes|required|in:Hommes,Femmes,Enfants,Mixte',
+            'gender' => 'required|in:Hommes,Femmes,Enfants,Mixte',
+            'telegram_link' => 'nullable|string|max:500',
+            'schedules' => 'nullable|array',
+            'schedules.*.id' => 'nullable|exists:class_schedules,id',
+            'schedules.*.day' => 'required|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
+            'schedules.*.start_time' => 'required|date_format:H:i',
+            'schedules.*.end_time' => 'required|date_format:H:i|after:schedules.*.start_time',
+            'schedules.*.teacher_name' => 'nullable|string|max:255',
+            'schedules.*.delete' => 'nullable|boolean'
         ];
     }
 
-    /**
-     * Get custom messages for validator errors.
-     *
-     * @return array
-     */
     public function messages(): array
     {
         return [
@@ -58,6 +53,21 @@ class UpdateClassroomRequest extends FormRequest
 
             'gender.required' => 'Le genre est obligatoire.',
             'gender.in' => 'Le genre doit être l\'un des suivants : Hommes, Femmes, Enfants, Mixte.',
+
+            'telegram_link.string' => 'Le lien Telegram doit être une chaîne de caractères.',
+            'telegram_link.max' => 'Le lien Telegram ne peut pas dépasser 500 caractères.',
+
+            'schedules.array' => 'Les horaires doivent être un tableau.',
+            'schedules.*.id.exists' => 'Le créneau spécifié n\'existe pas.',
+            'schedules.*.day.required' => 'Le jour est obligatoire pour chaque créneau.',
+            'schedules.*.day.in' => 'Le jour doit être un jour valide de la semaine.',
+            'schedules.*.start_time.required' => 'L\'heure de début est obligatoire.',
+            'schedules.*.start_time.date_format' => 'L\'heure de début doit être au format HH:MM.',
+            'schedules.*.end_time.required' => 'L\'heure de fin est obligatoire.',
+            'schedules.*.end_time.date_format' => 'L\'heure de fin doit être au format HH:MM.',
+            'schedules.*.end_time.after' => 'L\'heure de fin doit être après l\'heure de début.',
+            'schedules.*.teacher_name.string' => 'Le nom du professeur doit être une chaîne de caractères.',
+            'schedules.*.teacher_name.max' => 'Le nom du professeur ne peut pas dépasser 255 caractères.'
         ];
     }
 }
