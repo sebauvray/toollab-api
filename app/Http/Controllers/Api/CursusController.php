@@ -6,14 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCursusRequest;
 use App\Http\Requests\UpdateCursusRequest;
 use App\Models\Cursus;
+use App\Models\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class CursusController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request)
     {
         $query = Cursus::with(['levels', 'classrooms']);
@@ -57,9 +56,6 @@ class CursusController extends Controller
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(StoreCursusRequest $request)
     {
         $validatedData = $request->validated();
@@ -103,9 +99,6 @@ class CursusController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(Cursus $cursus)
     {
         $cursus->load('levels');
@@ -131,9 +124,6 @@ class CursusController extends Controller
         ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(UpdateCursusRequest $request, Cursus $cursus)
     {
         DB::beginTransaction();
@@ -161,18 +151,35 @@ class CursusController extends Controller
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Cursus $cursus)
     {
+        $user = Auth::user();
+
+        $userSchoolIds = $user->roles()
+            ->where('roleable_type', 'school')
+            ->whereHas('role', function ($query) {
+                $query->whereIn('slug', ['director', 'admin']);
+            })
+            ->pluck('roleable_id')
+            ->toArray();
+
+        if (!in_array($cursus->school_id, $userSchoolIds)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Vous n\'êtes pas autorisé à supprimer ce cursus'
+            ], 403);
+        }
+
         DB::beginTransaction();
 
         try {
             $classrooms = $cursus->classrooms()->get();
 
             foreach ($classrooms as $classroom) {
-                $classroom->userRoles()->delete();
+                UserRole::where('roleable_type', 'classroom')
+                    ->where('roleable_id', $classroom->id)
+                    ->delete();
+
                 $classroom->delete();
             }
 
