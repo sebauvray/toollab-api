@@ -49,10 +49,12 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::get('/', [FamilyController::class, 'index']);
         Route::post('/', [FamilyController::class, 'store']);
         Route::get('/{family}', [FamilyController::class, 'show']);
+        Route::put('/{family}', [FamilyController::class, 'update']);
         Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
         Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
         Route::put('/{family}/students/{student}', [FamilyController::class, 'updateStudent']);
         Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
+        Route::post('/{family}/responsible', [FamilyController::class, 'addResponsibleToFamily']);
     });
 
 

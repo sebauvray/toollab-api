@@ -195,6 +195,89 @@ class FamilyController extends Controller
         }
     }
 
+    public function update(Request $request, Family $family, User $user)
+    {
+        $request->validate([
+            'lastname' => 'required|string|max:255',
+            'firstname' => 'required|string|max:255',
+            'phone' => 'required|string',
+            'address' => 'required|string',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'zipcode' => 'required|string',
+            'city' => 'required|string',
+            'is_student' => 'boolean',
+            'birthdate' => 'required_if:is_student,true|nullable|date',
+            'gender' => 'required_if:is_student,true|nullable|in:M,F',
+        ], [
+            'lastname.required' => 'Le nom est requis.',
+            'lastname.string' => 'Le nom doit être une chaîne de caractères.',
+            'lastname.max' => 'Le nom ne peut pas dépasser 255 caractères.',
+
+            'firstname.required' => 'Le prénom est requis.',
+            'firstname.string' => 'Le prénom doit être une chaîne de caractères.',
+            'firstname.max' => 'Le prénom ne peut pas dépasser 255 caractères.',
+
+            'email.required' => 'L\'adresse email est requise.',
+            'email.email' => 'L\'adresse email doit être une adresse valide.',
+            'email.unique' => 'L\'adresse email est déjà utilisée.',
+
+            'phone.required' => 'Le numéro de téléphone est requis.',
+            'phone.string' => 'Le numéro de téléphone doit être une chaîne de caractères.',
+
+            'address.required' => 'L\'adresse est requise.',
+            'address.string' => 'L\'adresse doit être une chaîne de caractères.',
+
+            'zipcode.required' => 'Le code postal est requis.',
+            'zipcode.string' => 'Le code postal doit être une chaîne de caractères.',
+
+            'city.required' => 'La ville est requise.',
+            'city.string' => 'La ville doit être une chaîne de caractères.',
+
+            'is_student.boolean' => 'Le champ "est étudiant" doit être vrai ou faux.',
+
+            'birthdate.required_if' => 'La date de naissance est obligatoire pour les étudiants.',
+            'birthdate.date' => 'La date de naissance doit être une date valide.',
+
+            'gender.required_if' => 'Le genre est obligatoire pour les étudiants.',
+            'gender.in' => 'Le genre doit être "M" (masculin) ou "F" (féminin).',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $user->first_name = $request->firstname;
+            $user->last_name = $request->lastname;
+            $user->email = $request->email;
+            $user->save();
+
+            $this->updateOrCreateUserInfo($user, self::KEY_PHONE, $request->phone);
+            $this->updateOrCreateUserInfo($user, self::KEY_ADDRESS, $request->address);
+            $this->updateOrCreateUserInfo($user, self::KEY_ZIPCODE, $request->zipcode);
+            $this->updateOrCreateUserInfo($user, self::KEY_CITY, $request->city);
+
+            if ($request->is_student) {
+                $this->updateOrCreateUserInfo($user, self::KEY_BIRTHDATE, $request->birthdate);
+                $this->updateOrCreateUserInfo($user, self::KEY_GENDER, $request->gender);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Responsable mis à jour avec succès',
+                'data' => $user->refresh()
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Une erreur est survenue lors de la mise à jour du responsable',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
     public function show(Family $family)
     {
         $responsibles = $family->userRoles()
@@ -217,7 +300,10 @@ class FamilyController extends Controller
                     'address' => $userInfos[self::KEY_ADDRESS] ?? null,
                     'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
                     'city' => $userInfos[self::KEY_CITY] ?? null,
-                    'role' => $userRole->role->name
+                    'role' => $userRole->role->name,
+                    'is_student'=>$this->isUserStudent($user->id, $userRole->roleable_id),
+                    'birthdate' => $userInfos[self::KEY_BIRTHDATE] ?? null,
+                    'gender' => $userInfos['gender'] ?? null,
                 ];
             });
 
@@ -488,6 +574,82 @@ class FamilyController extends Controller
         }
     }
 
+    public function addResponsibleToFamily(Family $family, Request $request)
+    {
+        $request->validate([
+            'lastname' => 'required|string|max:255',
+            'firstname' => 'required|string|max:255',
+            'phone' => 'required|string',
+            'address' => 'required|string',
+            'email' => 'required|email|unique:users,email',
+            'zipcode' => 'required|string',
+            'city' => 'required|string',
+            'is_student' => 'boolean',
+            'birthdate' => 'required_if:is_student,true|nullable|date',
+            'gender' => 'required_if:is_student,true|nullable|in:M,F',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $user = User::create([
+                'first_name' => $request->firstname,
+                'last_name' => $request->lastname,
+                'email' => $request->email,
+                'password' => Hash::make($request->password ?? str()->random(12)),
+                'access' => true
+            ]);
+
+            $responsibleRole = Role::where('slug', 'responsible')->first();
+            if (!$responsibleRole) {
+                throw new \Exception('Role responsible not found');
+            }
+
+            $this->updateOrCreateUserInfo($user, self::KEY_PHONE, $request->phone);
+            $this->updateOrCreateUserInfo($user, self::KEY_ADDRESS, $request->address);
+            $this->updateOrCreateUserInfo($user, self::KEY_ZIPCODE, $request->zipcode);
+            $this->updateOrCreateUserInfo($user, self::KEY_CITY, $request->city);
+
+            $family->userRoles()->create([
+                'user_id' => $user->id,
+                'role_id' => $responsibleRole->id,
+            ]);
+
+            if ($request->is_student) {
+                $studentRole = Role::where('slug', 'student')->first();
+
+                if ($studentRole) {
+                    $family->userRoles()->firstOrCreate([
+                        'user_id' => $user->id,
+                        'role_id' => $studentRole->id,
+                    ]);
+
+                    $this->updateOrCreateUserInfo($user, self::KEY_BIRTHDATE, $request->birthdate);
+                    $this->updateOrCreateUserInfo($user, self::KEY_GENDER, $request->gender);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Responsable ajouté à la famille avec succès',
+                'data' => [
+                    'family_id' => $family->id,
+                    'user' => $user
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Une erreur est survenue lors de l\'ajout du responsable',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
     private function getUserClassroom($userId)
     {
         $userRole = UserRole::where('user_id', $userId)
@@ -518,6 +680,22 @@ class FamilyController extends Controller
             })
             ->exists();
     }
+
+    private function isUserStudent($userId, $familyId)
+    {
+        return DB::table('user_roles')
+            ->where('user_id', $userId)
+            ->where('roleable_id', $familyId)
+            ->where('roleable_type', 'family')
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('roles')
+                    ->whereColumn('roles.id', 'user_roles.role_id')
+                    ->where('roles.slug', 'student');
+            })
+            ->exists();
+    }
+
 
     private function updateOrCreateUserInfo(User $user, $key, $value)
     {
