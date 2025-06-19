@@ -65,10 +65,15 @@ class TarifCalculatorService
             $detailsParEleve[] = $detailEleve;
         }
 
+        $responsable = $family->userRoles->first();
+        $responsable_fullname = $responsable->user ? $responsable->user->first_name . ' ' . $responsable->user->last_name : 'Sans responsable';
+
         return [
             'total' => round($totalFamille, 2),
             'details_par_eleve' => $detailsParEleve,
-            'nombre_eleves' => count($inscriptionsData)
+            'nombre_eleves' => count($inscriptionsData),
+            'nom_famille' => $responsable_fullname,
+            'id_famille' => $family->id,
         ];
     }
 
