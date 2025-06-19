@@ -71,10 +71,12 @@ class StudentClassroomController extends Controller
                 ->first();
 
             if ($existingTypeEnrollment) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'L\'élève est déjà inscrit dans une classe de type ' . $classroom->type
-                ], 400);
+                $existingTypeEnrollment->delete();
+
+                UserRole::where('user_id', $request->student_id)
+                    ->where('roleable_type', 'classroom')
+                    ->where('roleable_id', $existingTypeEnrollment->classroom_id)
+                    ->delete();
             }
 
             $enrollment = StudentClassroom::create([
@@ -108,7 +110,7 @@ class StudentClassroomController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Élève inscrit avec succès',
-                'data' => $enrollment->load(['classroom.schedules.teacher', 'classroom.level'])
+                'data' => $enrollment->load(['classroom.schedules', 'classroom.level'])
             ]);
 
         } catch (\Exception $e) {
@@ -176,7 +178,7 @@ class StudentClassroomController extends Controller
                 ->whereHas('role', function($q) {
                     $q->where('slug', 'student');
                 })
-                ->with(['user.studentClassrooms.classroom.schedules.teacher', 'user.studentClassrooms.classroom.level'])
+                ->with(['user.studentClassrooms.classroom.schedules', 'user.studentClassrooms.classroom.level'])
                 ->get();
 
             $enrollments = [];

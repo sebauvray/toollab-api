@@ -70,7 +70,7 @@ class ClassroomController extends Controller
     public function show($id)
     {
         try {
-            $classroom = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules.teacher'])
+            $classroom = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules'])
                 ->findOrFail($id);
 
             return response()->json([
@@ -93,10 +93,7 @@ class ClassroomController extends Controller
                             'start_time' => $schedule->start_time,
                             'end_time' => $schedule->end_time,
                             'formatted_time' => $schedule->formatted_time,
-                            'teacher' => $schedule->teacher ? [
-                                'id' => $schedule->teacher->id,
-                                'name' => $schedule->teacher->first_name . ' ' . $schedule->teacher->last_name
-                            ] : null
+                            'teacher_name' => $schedule->teacher_name
                         ];
                     })
                 ]
