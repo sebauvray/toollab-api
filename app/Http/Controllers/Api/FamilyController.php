@@ -43,30 +43,50 @@ class FamilyController extends Controller
 
         $paginatedData = $this->paginateQuery($query, $request);
 
-        $formattedItems = collect($paginatedData['items'])->map(function ($family) {
-            $responsable = $family->userRoles->first();
-            $user = $responsable ? $responsable->user : null;
+        $formattedItems = collect($paginatedData['items'])->flatMap(function ($family) {
+            $responsables = $family->userRoles;
 
-            $userInfos = $user ? collect($user->infos)->pluck('value', 'key')->toArray() : [];
+            if ($responsables->isEmpty()) {
+                return [[
+                    'id' => $family->id,
+                    'nom' => 'Sans responsable',
+                    'nombreEleves' => $family->students_count,
+                    'status' => 'inconnu',
+                    'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
+                    'contact' => [
+                        'phone' => null,
+                        'email' => null,
+                        'address' => null,
+                        'zipcode' => null,
+                        'city' => null
+                    ]
+                ]];
+            }
 
-            $paymentStatuses = ['paid', 'pending', 'incomplete', 'exempted'];
-            $status = $paymentStatuses[array_rand($paymentStatuses)];
+            return $responsables->map(function ($responsable) use ($family) {
+                $user = $responsable->user;
+                $userInfos = $user ? collect($user->infos)->pluck('value', 'key')->toArray() : [];
 
-            return [
-                'id' => $family->id,
-                'nom' => $user ? $user->first_name . ' ' . $user->last_name : 'Sans responsable',
-                'nombreEleves' => $family->students_count,
-                'status' => $status,
-                'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
-                'contact' => [
-                    'phone' => $userInfos[self::KEY_PHONE] ?? null,
-                    'email' => $user ? $user->email : null,
-                    'address' => $userInfos[self::KEY_ADDRESS] ?? null,
-                    'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
-                    'city' => $userInfos[self::KEY_CITY] ?? null
-                ]
-            ];
+                $paymentStatuses = ['paid', 'pending', 'incomplete', 'exempted'];
+                $status = $paymentStatuses[array_rand($paymentStatuses)];
+
+                return [
+                    'id' => $family->id,
+                    'nom' => $user ? $user->first_name . ' ' . $user->last_name : 'Sans responsable',
+                    'nombreEleves' => $family->students_count,
+                    'status' => $status,
+                    'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
+                    'contact' => [
+                        'phone' => $userInfos[self::KEY_PHONE] ?? null,
+                        'email' => $user ? $user->email : null,
+                        'address' => $userInfos[self::KEY_ADDRESS] ?? null,
+                        'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
+                        'city' => $userInfos[self::KEY_CITY] ?? null
+                    ]
+                ];
+            });
         });
+
 
         return response()->json([
             'status' => 'success',
