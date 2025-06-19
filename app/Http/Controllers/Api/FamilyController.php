@@ -635,6 +635,38 @@ class FamilyController extends Controller
             'is_student' => 'boolean',
             'birthdate' => 'required_if:is_student,true|nullable|date',
             'gender' => 'required_if:is_student,true|nullable|in:M,F',
+        ], [
+            'lastname.required' => 'Le nom est requis.',
+            'lastname.string' => 'Le nom doit être une chaîne de caractères.',
+            'lastname.max' => 'Le nom ne peut pas dépasser 255 caractères.',
+
+            'firstname.required' => 'Le prénom est requis.',
+            'firstname.string' => 'Le prénom doit être une chaîne de caractères.',
+            'firstname.max' => 'Le prénom ne peut pas dépasser 255 caractères.',
+
+            'email.required' => 'L\'adresse email est requise.',
+            'email.email' => 'L\'adresse email doit être une adresse valide.',
+            'email.unique' => 'L\'adresse email est déjà utilisée.',
+
+            'phone.required' => 'Le numéro de téléphone est requis.',
+            'phone.string' => 'Le numéro de téléphone doit être une chaîne de caractères.',
+
+            'address.required' => 'L\'adresse est requise.',
+            'address.string' => 'L\'adresse doit être une chaîne de caractères.',
+
+            'zipcode.required' => 'Le code postal est requis.',
+            'zipcode.string' => 'Le code postal doit être une chaîne de caractères.',
+
+            'city.required' => 'La ville est requise.',
+            'city.string' => 'La ville doit être une chaîne de caractères.',
+
+            'is_student.boolean' => 'Le champ "est étudiant" doit être vrai ou faux.',
+
+            'birthdate.required_if' => 'La date de naissance est obligatoire pour les étudiants.',
+            'birthdate.date' => 'La date de naissance doit être une date valide.',
+
+            'gender.required_if' => 'Le genre est obligatoire pour les étudiants.',
+            'gender.in' => 'Le genre doit être "M" (masculin) ou "F" (féminin).',
         ]);
 
         DB::beginTransaction();
