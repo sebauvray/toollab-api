@@ -53,6 +53,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
         Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
         Route::put('/{family}/students/{student}', [FamilyController::class, 'updateStudent']);
+        Route::delete('/{family}/students/{student}', [FamilyController::class, 'deleteStudent']);
         Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
         Route::post('/{family}/responsible', [FamilyController::class, 'addResponsibleToFamily']);
         Route::put('/{family}/responsible/{responsible}', [FamilyController::class, 'updateResponsible']);
