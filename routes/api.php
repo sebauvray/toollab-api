@@ -55,6 +55,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::put('/{family}/students/{student}', [FamilyController::class, 'updateStudent']);
         Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
         Route::post('/{family}/responsible', [FamilyController::class, 'addResponsibleToFamily']);
+        Route::put('/{family}/responsible/{responsible}', [FamilyController::class, 'updateResponsible']);
     });
 
 

@@ -669,6 +669,89 @@ class FamilyController extends Controller
         }
     }
 
+    public function updateResponsible(Family $family, User $responsible, Request $request)
+    {
+        $request->validate([
+            'lastname' => 'required|string|max:255',
+            'firstname' => 'required|string|max:255',
+            'phone' => 'required|string',
+            'address' => 'required|string',
+            'email' => 'required|email|unique:users,email,' . $responsible->id,
+            'zipcode' => 'required|string',
+            'city' => 'required|string',
+            'is_student' => 'boolean',
+            'birthdate' => 'required_if:is_student,true|nullable|date',
+            'gender' => 'required_if:is_student,true|nullable|in:M,F',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $responsible->update([
+                'first_name' => $request->firstname,
+                'last_name' => $request->lastname,
+                'email' => $request->email,
+            ]);
+
+            $this->updateOrCreateUserInfo($responsible, self::KEY_PHONE, $request->phone);
+            $this->updateOrCreateUserInfo($responsible, self::KEY_ADDRESS, $request->address);
+            $this->updateOrCreateUserInfo($responsible, self::KEY_ZIPCODE, $request->zipcode);
+            $this->updateOrCreateUserInfo($responsible, self::KEY_CITY, $request->city);
+
+            // S'assurer que le rôle de "responsable" est bien assigné à cette famille
+            $responsibleRole = Role::where('slug', 'responsible')->first();
+            if (!$responsibleRole) {
+                throw new \Exception('Role responsible not found');
+            }
+
+            $family->userRoles()->updateOrCreate(
+                ['user_id' => $responsible->id, 'role_id' => $responsibleRole->id]
+            );
+
+            if ($request->is_student) {
+                $studentRole = Role::where('slug', 'student')->first();
+
+                if ($studentRole) {
+                    $family->userRoles()->updateOrCreate([
+                        'user_id' => $responsible->id,
+                        'role_id' => $studentRole->id,
+                    ]);
+
+                    $this->updateOrCreateUserInfo($responsible, self::KEY_BIRTHDATE, $request->birthdate);
+                    $this->updateOrCreateUserInfo($responsible, self::KEY_GENDER, $request->gender);
+                }
+            } else {
+                // Optionnel : si is_student = false, supprimer le rôle student ?
+                $studentRole = Role::where('slug', 'student')->first();
+                if ($studentRole) {
+                    $family->userRoles()
+                        ->where('user_id', $responsible->id)
+                        ->where('role_id', $studentRole->id)
+                        ->delete();
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Responsable mis à jour avec succès',
+                'data' => [
+                    'family_id' => $family->id,
+                    'user' => $responsible
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Une erreur est survenue lors de la mise à jour du responsable',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
 
     private function getUserClassroom($userId)
     {
