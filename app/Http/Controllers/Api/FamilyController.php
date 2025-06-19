@@ -544,6 +544,34 @@ class FamilyController extends Controller
         }
     }
 
+    public function deleteStudent(Family $family, User $student)
+    {
+        DB::beginTransaction();
+
+        try {
+
+            // Étape 1 : supprimer les lignes dans user_infos
+            DB::table('user_infos')->where('user_id', $student->id)->delete();
+
+            // Étape 2 : supprimer les lignes dans user_roles
+            DB::table('user_roles')->where('user_id', $student->id)->delete();
+
+            // Étape 3 : supprimer l'utilisateur
+            $student->delete();
+
+            DB::commit();
+
+            return response()->json(['message' => 'Élève et données associées supprimés avec succès.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de la suppression.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
     public function addResponsible(Request $request, Family $family)
     {
