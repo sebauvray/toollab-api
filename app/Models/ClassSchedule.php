@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Carbon\Carbon;
 
 class ClassSchedule extends Model
 {
@@ -17,11 +18,6 @@ class ClassSchedule extends Model
         'teacher_name'
     ];
 
-    protected $casts = [
-        'start_time' => 'datetime:H:i',
-        'end_time' => 'datetime:H:i'
-    ];
-
     public function classroom()
     {
         return $this->belongsTo(Classroom::class);
@@ -30,8 +26,8 @@ class ClassSchedule extends Model
     public function getFormattedTimeAttribute()
     {
         return sprintf('%s à %s',
-            date('H\h', strtotime($this->start_time)),
-            date('H\h', strtotime($this->end_time))
+            Carbon::parse($this->start_time)->format('H\hi'),
+            Carbon::parse($this->end_time)->format('H\hi')
         );
     }
 }
