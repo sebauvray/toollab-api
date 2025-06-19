@@ -55,7 +55,9 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
     });
 
-    Route::prefix('cursus')->group(function () {
+
+
+    Route::prefix('cursus')->middleware('checkrole:director,admin')->group(function () {
         Route::get('/', [CursusController::class, 'index']);
         Route::post('/', [CursusController::class, 'store']);
         Route::get('/{cursus}', [CursusController::class, 'show']);
@@ -83,7 +85,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('/families/{family}/enrollments', [StudentClassroomController::class, 'getFamilyEnrollments']);
 
 
-    Route::prefix('tarification')->group(function () {
+    Route::prefix('tarification')->middleware('checkrole:director,admin')->group(function () {
         Route::get('/cursus', [TarificationController::class, 'index']);
         Route::post('/cursus/{cursus}/tarif', [TarificationController::class, 'updateTarif']);
         Route::post('/cursus/{cursus}/reduction-familiale', [TarificationController::class, 'storeReductionFamiliale']);
