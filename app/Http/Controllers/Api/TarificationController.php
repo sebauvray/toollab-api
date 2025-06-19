@@ -105,8 +105,11 @@ class TarificationController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Tarif mis à jour avec succès'
-        ]);
+            'message' => 'Tarif mis à jour avec succès',
+            'data' => [
+                'tarif' => $cursus->tarif // ⚠️ Assure-toi que la relation existe
+            ]
+        ], 200);
     }
 
     public function storeReductionFamiliale(Request $request, Cursus $cursus)
