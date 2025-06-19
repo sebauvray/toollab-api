@@ -107,7 +107,7 @@ class TarificationController extends Controller
             'status' => 'success',
             'message' => 'Tarif mis à jour avec succès',
             'data' => [
-                'tarif' => $cursus->tarif // ⚠️ Assure-toi que la relation existe
+                'tarif' => $cursus->tarif
             ]
         ], 200);
     }
