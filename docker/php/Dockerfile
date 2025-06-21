@@ -16,6 +16,8 @@ RUN useradd -m -u $CURRENT_UID $CURRENT_USER
 RUN usermod -a -G www-data $CURRENT_USER
 
 RUN apt-get update && apt-get install -y \
+    sudo \ 
+    supervisor \  
     libpng-dev \
     libonig-dev \
     libxml2-dev \
@@ -28,6 +30,10 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-configure zip \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
 
+# CONFIGURE SUDOERS ONLY FOR SUPERVISOR
+RUN echo "$CURRENT_USER ALL=(ALL) NOPASSWD:SETENV: ALL" > /etc/sudoers.d/$CURRENT_USER \
+    && chmod 440 /etc/sudoers.d/$CURRENT_USER
+
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
 # ========== STAGE DEV ==========
@@ -38,7 +44,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 USER $CURRENT_USER
 
-CMD ["entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # ========== STAGE PROD ==========
 FROM base AS prod
@@ -49,8 +55,14 @@ COPY . .
 
 RUN chown -R $CURRENT_USER:$CURRENT_USER /var/www
 
+# COPY THE SUPERVISORD CONFIG GENERATION SCRIPT AND EXECUTE IT
+COPY docker/php/generate-supervisord-conf.sh /usr/local/bin/generate-supervisord-conf.sh
+RUN chmod +x /usr/local/bin/generate-supervisord-conf.sh \
+    && /usr/local/bin/generate-supervisord-conf.sh /etc/supervisord.conf $CURRENT_USER
+    
+COPY /docker/php/production-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER $CURRENT_USER
 
-RUN composer install
-
-CMD ["php-fpm"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
