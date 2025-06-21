@@ -2,10 +2,12 @@
 
 use App\Http\Middleware\CheckRole;
 use Illuminate\Foundation\Application;
-use Illuminate\Http\Request;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -46,23 +48,36 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (Throwable $e, Request $request) {
             if ($request->is('api/*') && env('APP_ENV') === 'production') {
-                $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
-
-                if (
-                    $e instanceof ValidationException ||
-                    $e instanceof \Illuminate\Auth\AuthenticationException ||
-                    $e instanceof \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException
-                ) {
+                
+                if ($e instanceof ValidationException) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => $e->getMessage(),
+                        'errors' => $e->errors() // Optionnel : inclure les détails des erreurs
+                    ], 422);
+                }
+                
+                if ($e instanceof \Illuminate\Auth\AuthenticationException) {
                     return response()->json([
                         'status' => 'error',
                         'message' => $e->getMessage()
-                    ], $status);
+                    ], 401);
+                }
+                
+                if ($e instanceof \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => $e->getMessage()
+                    ], 403);
                 }
 
+                // Pour toutes les autres exceptions
+                $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
+                
                 return response()->json([
                     'status' => 'error',
                     'message' => 'The service encountered an issue. Please contact the administrator.'
-                ], 500);
+                ], $status);
             }
         });
     })
