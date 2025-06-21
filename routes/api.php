@@ -77,6 +77,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::delete('/{id}', [ClassroomController::class, 'destroy']);
     });
 
+    Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
+        Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
+        Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
+    });
+
     Route::prefix('schools')->group(function () {
         Route::get('/', [SchoolController::class, 'index']);
         Route::get('/{school}', [SchoolController::class, 'show']);

@@ -7,6 +7,7 @@ use App\Http\Requests\StoreClassroomRequest;
 use App\Http\Requests\UpdateClassroomRequest;
 use App\Models\Classroom;
 use App\Models\ClassSchedule;
+use App\Models\StudentClassroom;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -314,6 +315,84 @@ class ClassroomController extends Controller
                 'status' => 'error',
                 'message' => 'Erreur lors du retrait de l\'élève',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getAdminClassrooms(Request $request)
+    {
+        $user = $request->user();
+        $schoolId = $request->get('school_id', 1);
+
+        $classrooms = Classroom::with([
+            'cursus',
+            'level',
+            'activeStudents.infos',
+            'activeStudents' => function($query) {
+                $query->select('users.id', 'users.first_name', 'users.last_name', 'users.email');
+            }
+        ])
+            ->where('school_id', $schoolId)
+            ->orderBy('cursus_id')
+            ->orderBy('level_id')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $classrooms->map(function ($classroom) {
+                return [
+                    'id' => $classroom->id,
+                    'name' => $classroom->name,
+                    'cursus' => $classroom->cursus?->name ?? 'N/A',
+                    'cursus_id' => $classroom->cursus_id,
+                    'level' => $classroom->level?->name ?? 'N/A',
+                    'level_id' => $classroom->level_id,
+                    'gender' => $classroom->gender,
+                    'size' => $classroom->size,
+                    'student_count' => $classroom->student_count,
+                    'available_spots' => $classroom->available_spots,
+                    'students' => $classroom->activeStudents->map(function ($student) {
+                        return [
+                            'id' => $student->id,
+                            'first_name' => $student->first_name,
+                            'last_name' => $student->last_name,
+                            'email' => $student->email,
+                            'full_name' => $student->first_name . ' ' . $student->last_name
+                        ];
+                    })
+                ];
+            })
+        ]);
+    }
+
+    public function removeStudentFromClass(Request $request, $classroomId, $studentId)
+    {
+        try {
+            $classroom = Classroom::findOrFail($classroomId);
+
+            $enrollment = StudentClassroom::where('classroom_id', $classroomId)
+                ->where('student_id', $studentId)
+                ->where('status', 'active')
+                ->first();
+
+            if (!$enrollment) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'L\'élève n\'est pas inscrit dans cette classe'
+                ], 404);
+            }
+
+            $enrollment->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'L\'élève a été retiré de la classe avec succès'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Erreur lors de la suppression de l\'élève de la classe'
             ], 500);
         }
     }
