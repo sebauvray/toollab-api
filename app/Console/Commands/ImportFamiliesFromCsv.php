@@ -72,6 +72,8 @@ class ImportFamiliesFromCsv extends Command
                     ]);
 
                     $family = Family::create();
+                    $family->school_id = 1;
+                    $family->save();
 
                     $responsibleRole = Role::where('slug', 'responsible')->firstOrFail();
                     $studentRole = Role::where('slug', 'student')->firstOrFail();
@@ -82,12 +84,6 @@ class ImportFamiliesFromCsv extends Command
                             'role_id' => $roleId,
                             'roleable_type' => 'family',
                             'roleable_id' => $family->id,
-                        ]);
-
-                        $school = School::findOrFail(1);
-                        $school->userRoles()->create([
-                            'user_id' => $student->id,
-                            'role_id' => $roleId,
                         ]);
                     }
 
@@ -153,6 +149,8 @@ class ImportFamiliesFromCsv extends Command
                     }
 
                     $family = Family::create();
+                    $family->school_id = 1;
+                    $family->save();
 
                     $responsibleRole = Role::where('slug', 'responsible')->firstOrFail();
 
@@ -161,12 +159,6 @@ class ImportFamiliesFromCsv extends Command
                         'role_id' => $responsibleRole->id,
                         'roleable_type' => 'family',
                         'roleable_id' => $family->id,
-                    ]);
-
-                    $school = School::findOrFail(1);
-                    $school->userRoles()->create([
-                        'user_id' => $responsible->id,
-                        'role_id' => $responsibleRole->id,
                     ]);
 
                     $families[$r1_ident] = $family;
