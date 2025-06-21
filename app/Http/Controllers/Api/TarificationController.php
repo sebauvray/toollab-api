@@ -25,7 +25,7 @@ class TarificationController extends Controller
         $userRole = $user->roles()
             ->where('roleable_type', 'school')
             ->whereHas('role', function ($query) {
-                $query->where('name', 'Directeur');
+                $query->whereIn('name', ['Directeur', 'Administrateur']);
             })
             ->first();
 
