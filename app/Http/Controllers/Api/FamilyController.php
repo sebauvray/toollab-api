@@ -10,6 +10,7 @@ use App\Models\UserInfo;
 use App\Models\UserRole;
 use App\Models\StudentClassroom;
 use App\Traits\PaginationTrait;
+use App\Services\PaiementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -22,8 +23,14 @@ class FamilyController extends Controller
     const KEY_ZIPCODE = 'zipcode';
     const KEY_CITY = 'city';
     const KEY_BIRTHDATE = 'birthdate';
-
     const KEY_GENDER = 'gender';
+
+    protected $paiementService;
+
+    public function __construct(PaiementService $paiementService)
+    {
+        $this->paiementService = $paiementService;
+    }
 
     public function index(Request $request)
     {
@@ -41,6 +48,10 @@ class FamilyController extends Controller
             });
         }]);
 
+        $query->withCount(['studentClassrooms as active_inscriptions_count' => function ($q) {
+            $q->where('status', 'active');
+        }]);
+
         $paginatedData = $this->paginateQuery($query, $request);
 
         $formattedItems = collect($paginatedData['items'])->flatMap(function ($family) {
@@ -51,7 +62,7 @@ class FamilyController extends Controller
                     'id' => $family->id,
                     'nom' => 'Sans responsable',
                     'nombreEleves' => $family->students_count,
-                    'status' => 'inconnu',
+                    'status' => $this->calculatePaymentStatus($family),
                     'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
                     'contact' => [
                         'phone' => null,
@@ -67,14 +78,11 @@ class FamilyController extends Controller
                 $user = $responsable->user;
                 $userInfos = $user ? collect($user->infos)->pluck('value', 'key')->toArray() : [];
 
-                $paymentStatuses = ['paid', 'pending', 'incomplete', 'exempted'];
-                $status = $paymentStatuses[array_rand($paymentStatuses)];
-
                 return [
                     'id' => $family->id,
                     'nom' => $user ? $user->first_name . ' ' . $user->last_name : 'Sans responsable',
                     'nombreEleves' => $family->students_count,
-                    'status' => $status,
+                    'status' => $this->calculatePaymentStatus($family),
                     'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
                     'contact' => [
                         'phone' => $userInfos[self::KEY_PHONE] ?? null,
@@ -87,7 +95,6 @@ class FamilyController extends Controller
             });
         });
 
-
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -95,6 +102,38 @@ class FamilyController extends Controller
                 'pagination' => $paginatedData['pagination']
             ]
         ]);
+    }
+
+    private function calculatePaymentStatus(Family $family): string
+    {
+        if ($family->active_inscriptions_count == 0) {
+            return '';
+        }
+
+        try {
+            $details = $this->paiementService->getDetailsPaiement($family);
+
+            $montantTotal = $details['montant_total'] ?? 0;
+            $montantPaye = $details['montant_paye'] ?? 0;
+            $resteAPayer = $details['reste_a_payer'] ?? $montantTotal;
+
+            if ($montantTotal == 0) {
+                return 'exempted';
+            }
+
+            if ($resteAPayer <= 0) {
+                return 'paid';
+            }
+
+            if ($montantPaye == 0) {
+                return 'incomplete';
+            }
+
+            return 'pending';
+
+        } catch (\Exception $e) {
+            return '';
+        }
     }
 
     public function store(Request $request)
@@ -296,7 +335,6 @@ class FamilyController extends Controller
             ], 500);
         }
     }
-
 
     public function show(Family $family)
     {
@@ -549,14 +587,8 @@ class FamilyController extends Controller
         DB::beginTransaction();
 
         try {
-
-            // Étape 1 : supprimer les lignes dans user_infos
             DB::table('user_infos')->where('user_id', $student->id)->delete();
-
-            // Étape 2 : supprimer les lignes dans user_roles
             DB::table('user_roles')->where('user_id', $student->id)->delete();
-
-            // Étape 3 : supprimer l'utilisateur
             $student->delete();
 
             DB::commit();
@@ -571,7 +603,6 @@ class FamilyController extends Controller
             ], 500);
         }
     }
-
 
     public function addResponsible(Request $request, Family $family)
     {
@@ -731,7 +762,6 @@ class FamilyController extends Controller
 
     public function updateResponsible(Family $family, User $responsible, Request $request)
     {
-
         $request->validate([
             'lastname' => 'required|string|max:255',
             'firstname' => 'required|string|max:255',
@@ -777,7 +807,6 @@ class FamilyController extends Controller
             'gender.in' => 'Le genre doit être "M" (masculin) ou "F" (féminin).',
         ]);
 
-
         DB::beginTransaction();
 
         try {
@@ -792,7 +821,6 @@ class FamilyController extends Controller
             $this->updateOrCreateUserInfo($responsible, self::KEY_ZIPCODE, $request->zipcode);
             $this->updateOrCreateUserInfo($responsible, self::KEY_CITY, $request->city);
 
-            // S'assurer que le rôle de "responsable" est bien assigné à cette famille
             $responsibleRole = Role::where('slug', 'responsible')->first();
             if (!$responsibleRole) {
                 throw new \Exception('Role responsible not found');
@@ -815,7 +843,6 @@ class FamilyController extends Controller
                     $this->updateOrCreateUserInfo($responsible, self::KEY_GENDER, $request->gender);
                 }
             } else {
-                // Optionnel : si is_student = false, supprimer le rôle student ?
                 $studentRole = Role::where('slug', 'student')->first();
                 if ($studentRole) {
                     $family->userRoles()
@@ -844,8 +871,6 @@ class FamilyController extends Controller
             ], 500);
         }
     }
-
-
 
     private function getUserClassroom($userId)
     {
@@ -892,7 +917,6 @@ class FamilyController extends Controller
             })
             ->exists();
     }
-
 
     private function updateOrCreateUserInfo(User $user, $key, $value)
     {
