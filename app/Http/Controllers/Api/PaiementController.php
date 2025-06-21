@@ -3,25 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\CheckPaymentCompletionJob;
 use App\Models\Family;
-use App\Models\Paiement;
 use App\Models\LignePaiement;
-use App\Services\TarifCalculatorService;
 use App\Services\PaiementService;
 use Illuminate\Http\Request;
 
 class PaiementController extends Controller
 {
-    protected $tarifCalculator;
     protected $paiementService;
 
-    public function __construct(TarifCalculatorService $tarifCalculator, PaiementService $paiementService)
+    public function __construct(PaiementService $paiementService)
     {
-        $this->tarifCalculator = $tarifCalculator;
         $this->paiementService = $paiementService;
     }
 
-    public function show(Request $request, Family $family)
+    public function show(Family $family)
     {
         try {
             $details = $this->paiementService->getDetailsPaiement($family);
@@ -33,7 +30,7 @@ class PaiementController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Erreur lors du chargement des paiements',
+                'message' => 'Erreur lors de la récupération des détails de paiement',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -53,6 +50,7 @@ class PaiementController extends Controller
 
         try {
             $details = $this->paiementService->getDetailsPaiement($family);
+            $previousResteAPayer = $details['reste_a_payer'];
             $nouveauMontantPaye = $details['montant_paye'] + $request->montant;
 
             if ($nouveauMontantPaye > $details['montant_total']) {
@@ -64,6 +62,8 @@ class PaiementController extends Controller
 
             $paiement = $this->paiementService->getOrCreatePaiement($family, $request->user()->id);
             $ligne = $this->paiementService->ajouterLignePaiement($paiement, $request->all());
+
+            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
 
             return response()->json([
                 'status' => 'success',
@@ -111,6 +111,7 @@ class PaiementController extends Controller
 
         try {
             $details = $this->paiementService->getDetailsPaiement($family);
+            $previousResteAPayer = $details['reste_a_payer'];
             $nouveauMontantPaye = $details['montant_paye'] - $ligne->montant + $request->montant;
 
             if ($nouveauMontantPaye > $details['montant_total']) {
@@ -121,6 +122,8 @@ class PaiementController extends Controller
             }
 
             $ligne = $this->paiementService->modifierLignePaiement($ligne, $request->all());
+
+            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
 
             return response()->json([
                 'status' => 'success',
@@ -150,10 +153,15 @@ class PaiementController extends Controller
         }
 
         try {
+            $details = $this->paiementService->getDetailsPaiement($family);
+            $previousResteAPayer = $details['reste_a_payer'];
+
             $montantSupprime = $ligne->montant;
             $this->paiementService->supprimerLignePaiement($ligne);
 
             $details = $this->paiementService->getDetailsPaiement($family);
+
+            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
 
             return response()->json([
                 'status' => 'success',
