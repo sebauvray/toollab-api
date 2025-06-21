@@ -6,6 +6,3 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/login', function () {
-    return redirect('/api/login');
-})->name('login');
