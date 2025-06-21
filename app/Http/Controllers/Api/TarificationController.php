@@ -93,7 +93,7 @@ class TarificationController extends Controller
         }
 
         $request->validate([
-            'prix' => 'required|numeric|min:0'
+            'prix' => 'required|integer|min:1'
         ]);
 
         DB::transaction(function () use ($cursus, $request) {

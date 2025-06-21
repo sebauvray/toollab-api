@@ -19,8 +19,8 @@ class LignePaiement extends Model
     ];
 
     protected $casts = [
-        'details' => 'array',
-        'montant' => 'decimal:2'
+        'montant' => 'integer',
+        'details' => 'array'
     ];
 
     public function paiement()

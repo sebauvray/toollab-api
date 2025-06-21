@@ -16,7 +16,7 @@ class Tarif extends Model
     ];
 
     protected $casts = [
-        'prix' => 'decimal:2',
+        'prix' => 'integer',
         'actif' => 'boolean'
     ];
 

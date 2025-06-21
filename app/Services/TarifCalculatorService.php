@@ -38,7 +38,7 @@ class TarifCalculatorService
                     continue;
                 }
 
-                $tarifBase = floatval($cursus->tarif->prix);
+                $tarifBase = intval($cursus->tarif->prix);
 
                 $nombreElevesCursus = $this->countStudentsInCursus($inscriptionsParCursus, $cursusId);
                 $reductionFamiliale = $this->getReductionFamiliale($cursus, $nombreElevesCursus);
@@ -56,20 +56,21 @@ class TarifCalculatorService
                     'reduction_familiale' => $reductionFamiliale,
                     'reduction_multi_cursus' => $reductionMultiCursus,
                     'reduction_appliquee' => $reduction,
-                    'tarif_final' => round($tarifFinal, 2)
+                    'tarif_final' => round($tarifFinal, 0, PHP_ROUND_HALF_UP)
                 ];
 
-                $totalFamille += $tarifFinal;
+                $totalFamille += round($tarifFinal, 0, PHP_ROUND_HALF_UP);
             }
 
             $detailsParEleve[] = $detailEleve;
         }
 
         $responsable = $family->userRoles->first();
-        $responsable_fullname = $responsable->user ? $responsable->user->first_name . ' ' . $responsable->user->last_name : 'Sans responsable';
+        $responsable_fullname = $responsable && $responsable->user ? $responsable->user->first_name . ' ' . $responsable->user->last_name : 'Sans responsable';
 
         return [
-            'total' => round($totalFamille, 2),
+            'total' => $totalFamille,
+            'total_famille' => $totalFamille,
             'details_par_eleve' => $detailsParEleve,
             'nombre_eleves' => count($inscriptionsData),
             'nom_famille' => $responsable_fullname,

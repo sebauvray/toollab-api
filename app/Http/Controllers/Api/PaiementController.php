@@ -43,7 +43,7 @@ class PaiementController extends Controller
     {
         $request->validate([
             'type' => 'required|in:espece,carte,cheque,exoneration',
-            'montant' => 'required|numeric|min:0.01',
+            'montant' => 'required|integer|min:1',
             'cheque' => 'required_if:type,cheque|array',
             'cheque.banque' => 'required_if:type,cheque|string',
             'cheque.numero' => 'required_if:type,cheque|string',
@@ -95,7 +95,7 @@ class PaiementController extends Controller
         $typePaiement = $ligne->type_paiement;
 
         $rules = [
-            'montant' => 'required|numeric|min:0.01',
+            'montant' => 'required|integer|min:1',
         ];
 
         if ($typePaiement === 'cheque') {
