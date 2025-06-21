@@ -18,6 +18,11 @@ class ClassSchedule extends Model
         'teacher_name'
     ];
 
+    protected $casts = [
+        'start_time' => 'datetime:H:i',
+        'end_time' => 'datetime:H:i',
+    ];
+
     public function classroom()
     {
         return $this->belongsTo(Classroom::class);
@@ -29,5 +34,15 @@ class ClassSchedule extends Model
             Carbon::parse($this->start_time)->format('H\hi'),
             Carbon::parse($this->end_time)->format('H\hi')
         );
+    }
+
+    public function getStartTimeAttribute($value)
+    {
+        return $value ? Carbon::parse($value)->format('H:i') : null;
+    }
+
+    public function getEndTimeAttribute($value)
+    {
+        return $value ? Carbon::parse($value)->format('H:i') : null;
     }
 }

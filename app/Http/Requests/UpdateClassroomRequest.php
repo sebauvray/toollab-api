@@ -24,9 +24,9 @@ class UpdateClassroomRequest extends FormRequest
             'telegram_link' => 'nullable|string|max:500',
             'schedules' => 'nullable|array',
             'schedules.*.id' => 'nullable|exists:class_schedules,id',
-            'schedules.*.day' => 'required|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
-            'schedules.*.start_time' => 'required|date_format:H:i',
-            'schedules.*.end_time' => 'required|date_format:H:i|after:schedules.*.start_time',
+            'schedules.*.day' => 'required_with:schedules.*|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
+            'schedules.*.start_time' => 'required_with:schedules.*|date_format:H:i',
+            'schedules.*.end_time' => 'required_with:schedules.*|date_format:H:i|after:schedules.*.start_time',
             'schedules.*.teacher_name' => 'nullable|string|max:255',
             'schedules.*.delete' => 'nullable|boolean'
         ];
@@ -59,11 +59,11 @@ class UpdateClassroomRequest extends FormRequest
 
             'schedules.array' => 'Les horaires doivent être un tableau.',
             'schedules.*.id.exists' => 'Le créneau spécifié n\'existe pas.',
-            'schedules.*.day.required' => 'Le jour est obligatoire pour chaque créneau.',
+            'schedules.*.day.required_with' => 'Le jour est obligatoire pour chaque créneau.',
             'schedules.*.day.in' => 'Le jour doit être un jour valide de la semaine.',
-            'schedules.*.start_time.required' => 'L\'heure de début est obligatoire.',
+            'schedules.*.start_time.required_with' => 'L\'heure de début est obligatoire.',
             'schedules.*.start_time.date_format' => 'L\'heure de début doit être au format HH:MM.',
-            'schedules.*.end_time.required' => 'L\'heure de fin est obligatoire.',
+            'schedules.*.end_time.required_with' => 'L\'heure de fin est obligatoire.',
             'schedules.*.end_time.date_format' => 'L\'heure de fin doit être au format HH:MM.',
             'schedules.*.end_time.after' => 'L\'heure de fin doit être après l\'heure de début.',
             'schedules.*.teacher_name.string' => 'Le nom du professeur doit être une chaîne de caractères.',
