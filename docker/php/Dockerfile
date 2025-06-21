@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y tzdata
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # CREATE USER AND GROUP
-RUN useradd -m -u $CURRENT_UID $CURRENT_USER
-RUN usermod -a -G www-data $CURRENT_USER
+RUN useradd -m -u $CURRENT_UID $CURRENT_USER \
+    && usermod -a -G www-data $CURRENT_USER \
+    && usermod -a -G $CURRENT_USER www-data
 
 RUN apt-get update && apt-get install -y \
     sudo \ 
@@ -32,7 +33,7 @@ RUN apt-get update && apt-get install -y \
 
 # CONFIGURE SUDOERS ONLY FOR SUPERVISOR
 RUN echo "$CURRENT_USER ALL=(ALL) NOPASSWD:SETENV: ALL" > /etc/sudoers.d/$CURRENT_USER \
-    && chmod 440 /etc/sudoers.d/$CURRENT_USER
+    && chmod 440 /etc/sudoers.d/$CURRENT_USER¨
 
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
