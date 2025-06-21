@@ -326,7 +326,7 @@ class UserController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Erreur lors de la recherche',
+                'message' => $e->getMessage(),
                 'data' => [
                     'students' => [],
                     'total' => 0
