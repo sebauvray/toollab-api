@@ -13,8 +13,14 @@ class Family extends Model
 
     protected $fillable = [
         'name',
-        'identifier'
+        'identifier',
+        'school_id'
     ];
+
+    public function school()
+    {
+        return $this->belongsTo(School::class);
+    }
 
     public function comments(): HasMany
     {

@@ -14,6 +14,7 @@ use App\Services\PaiementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 
 class FamilyController extends Controller
 {
@@ -186,6 +187,18 @@ class FamilyController extends Controller
         DB::beginTransaction();
 
         try {
+            $authenticatedUser = Auth::user();
+
+            $userSchoolRole = UserRole::where('user_id', $authenticatedUser->id)
+                ->where('roleable_type', 'school')
+                ->first();
+
+            if (!$userSchoolRole) {
+                throw new \Exception('L\'utilisateur n\'est associé à aucune école');
+            }
+
+            $schoolId = $userSchoolRole->roleable_id;
+
             $user = User::create([
                 'first_name' => $request->firstname,
                 'last_name' => $request->lastname,
@@ -205,7 +218,9 @@ class FamilyController extends Controller
             $this->updateOrCreateUserInfo($user, self::KEY_ZIPCODE, $request->zipcode);
             $this->updateOrCreateUserInfo($user, self::KEY_CITY, $request->city);
 
-            $family = Family::create();
+            $family = Family::create([
+                'school_id' => $schoolId
+            ]);
 
             $family->userRoles()->create([
                 'user_id' => $user->id,
