@@ -20,7 +20,7 @@ class ImportFamiliesFromCsv extends Command
 
     public function handle()
     {
-        $csv = Reader::createFromPath(storage_path('app/EXP_ELEVE.csv'), 'r');
+        $csv = Reader::createFromPath(base_path('resources/data/EXP_ELEVE.csv'), 'r');
         $csv->setDelimiter(';');
         $csv->setHeaderOffset(0);
         $records = $csv->getRecords();
