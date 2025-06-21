@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y tzdata
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # CREATE USER AND GROUP
-RUN useradd -m -u $CURRENT_UID $CURRENT_USER
-RUN usermod -a -G www-data $CURRENT_USER
+RUN adduser -h /home/$CURRENT_USER -D -u $CURRENT_UID $CURRENT_USER \
+    && addgroup www-data $CURRENT_USER
+
 
 RUN apt-get update && apt-get install -y \
     sudo \ 
