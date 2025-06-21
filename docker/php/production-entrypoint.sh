@@ -7,7 +7,7 @@ cd /var/www
 
 sudo mkdir -p /var/www/storage/logs
 sudo chown -R $CURRENT_USER:$CURRENT_USER /var/www/storage/logs
-sudo chmod -R 755 /var/www/storage/logs
+sudo chmod -R 777 /var/www/storage
 
 sudo mkdir -p /var/log
 sudo touch /var/log/supervisord.log

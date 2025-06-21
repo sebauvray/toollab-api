@@ -33,7 +33,7 @@ RUN apt-get update && apt-get install -y \
 
 # CONFIGURE SUDOERS ONLY FOR SUPERVISOR
 RUN echo "$CURRENT_USER ALL=(ALL) NOPASSWD:SETENV: ALL" > /etc/sudoers.d/$CURRENT_USER \
-    && chmod 440 /etc/sudoers.d/$CURRENT_USER
+    && chmod 440 /etc/sudoers.d/$CURRENT_USER¨
 
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
