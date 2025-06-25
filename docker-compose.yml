@@ -43,12 +43,13 @@ services:
       MARIADB_PASSWORD: ${DB_PASSWORD}
       MARIADB_ROOT_PASSWORD: ${DB_PASSWORD_ROOT}
     volumes:
-      - ${DB_VOLUME_NAME}:/var/lib/mysql
+      - persistent_db:/var/lib/mysql
     networks:
       - web
 
   maildev:
     image: maildev/maildev
+    container_name: ${CONTAINER_NAME_MAILDEV:-db-toollab}
     profiles: ["dev"]
     ports:
       - "1080:1080"
@@ -60,4 +61,6 @@ networks:
     driver: bridge
 
 volumes:
-  - ${DB_VOLUME_NAME}:/var/lib/mysql
+  persistent_db:
+    name: ${DB_VOLUME_NAME:-db_data}
+    driver: local

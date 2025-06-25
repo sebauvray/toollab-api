@@ -15,5 +15,5 @@ services:
       target: prod
 
 networks:
-  web:
+  ${NETWORK_NAME}:
     external: true
