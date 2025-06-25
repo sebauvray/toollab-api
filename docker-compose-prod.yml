@@ -1,13 +1,13 @@
 services:
   nginx:
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.web_toollab.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.web_toollab.entrypoints=web,websecure"
-      - "traefik.http.routers.web_toollab.tls=true"
-      - "traefik.http.routers.web_toollab.tls.certresolver=myresolver"
-      - "traefik.http.middlewares.web_toollab-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.web_toollab.middlewares=web_toollab-redirect"
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.web_toollab-${APP_ENV}.rule=Host(`${DOMAIN}`)"
+    - "traefik.http.routers.web_toollab-${APP_ENV}.entrypoints=web,websecure"
+    - "traefik.http.routers.web_toollab-${APP_ENV}.tls=true"
+    - "traefik.http.routers.web_toollab-${APP_ENV}.tls.certresolver=myresolver"
+    - "traefik.http.middlewares.web_toollab-${APP_ENV}-redirect.redirectscheme.scheme=https"
+    - "traefik.http.routers.web_toollab-${APP_ENV}.middlewares=web_toollab-${APP_ENV}-redirect"
   api:
     build:
       context: .
