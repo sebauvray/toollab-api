@@ -50,10 +50,6 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 # ========== STAGE PROD ==========
 FROM base AS prod
 
-USER root
-
-COPY . .
-
 RUN chown -R $CURRENT_USER:$CURRENT_USER /var/www
 
 # COPY THE SUPERVISORD CONFIG GENERATION SCRIPT AND EXECUTE IT
