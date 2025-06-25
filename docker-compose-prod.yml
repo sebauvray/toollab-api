@@ -13,7 +13,3 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
       target: prod
-
-networks:
-  ${NETWORK_NAME}:
-    external: true

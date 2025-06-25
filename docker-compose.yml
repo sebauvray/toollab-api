@@ -11,7 +11,7 @@ services:
     depends_on:
       - api
     networks:
-      - web
+      - toollab_network
 
   api:
     container_name: ${CONTAINER_NAME_API:-api-toollab}
@@ -29,7 +29,7 @@ services:
     depends_on:
       - db
     networks:
-      - web
+      - toollab_network
 
   db:
     container_name: ${CONTAINER_NAME_DB:-db-toollab}
@@ -45,20 +45,22 @@ services:
     volumes:
       - persistent_db:/var/lib/mysql
     networks:
-      - web
+      - toollab_network
 
   maildev:
     image: maildev/maildev
-    container_name: ${CONTAINER_NAME_MAILDEV:-db-toollab}
+    container_name: ${CONTAINER_NAME_MAILDEV:-maildev}
     profiles: ["dev"]
     ports:
       - "1080:1080"
       - "1025:1025"
     networks:
-      - web
+      - toollab_network
+
 networks:
-  web:
-    driver: bridge
+  toollab_network:
+    external: true
+    name: ${NETWORK_NAME}
 
 volumes:
   persistent_db:
