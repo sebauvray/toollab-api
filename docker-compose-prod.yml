@@ -2,7 +2,7 @@ services:
   nginx:
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.web_toollab.rule=Host(`api.toollab.fr`)"
+      - "traefik.http.routers.web_toollab.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.web_toollab.entrypoints=web,websecure"
       - "traefik.http.routers.web_toollab.tls=true"
       - "traefik.http.routers.web_toollab.tls.certresolver=myresolver"
