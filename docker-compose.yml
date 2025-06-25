@@ -4,7 +4,7 @@ services:
     image: nginx:stable-alpine3.21-perl
     env_file: .env
     ports:
-      - "8000:80"
+      - "${CONTAINER_PORT_WEB}:80"
     volumes:
       - ./:/var/www
       - ./docker/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template
@@ -36,7 +36,7 @@ services:
     image: mariadb:11.4.5
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "${CONTAINER_PORT_DB}:3306"
     environment:
       MARIADB_DATABASE: ${DB_DATABASE}
       MARIADB_USER: ${DB_USERNAME}
