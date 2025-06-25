@@ -43,7 +43,7 @@ services:
       MARIADB_PASSWORD: ${DB_PASSWORD}
       MARIADB_ROOT_PASSWORD: ${DB_PASSWORD_ROOT}
     volumes:
-      - db_data:/var/lib/mysql
+      - ${DB_VOLUME_NAME}:/var/lib/mysql
     networks:
       - web
 
@@ -60,4 +60,4 @@ networks:
     driver: bridge
 
 volumes:
-  db_data:
+  - ${DB_VOLUME_NAME}:/var/lib/mysql
