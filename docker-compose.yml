@@ -1,13 +1,14 @@
 services:
+
   nginx:
+    build:
+      context: ./docker/nginx
     container_name: ${CONTAINER_NAME_WEB:-web-toollab}
-    image: nginx:stable-alpine3.21-perl
     env_file: .env
     ports:
       - "${CONTAINER_PORT_WEB}:80"
     volumes:
       - ./:/var/www
-      - ./docker/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template
     depends_on:
       - api
     networks:
