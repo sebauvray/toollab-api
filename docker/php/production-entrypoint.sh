@@ -1,9 +1,7 @@
 #!/bin/sh
 set -e
 
-# Install des dépendances PHP
 cd /var/www
-# composer install --no-interaction --prefer-dist --optimize-autoloader
 
 sudo mkdir -p /var/www/storage/logs
 sudo chown -R $CURRENT_USER:$CURRENT_USER /var/www/storage/logs
@@ -15,7 +13,7 @@ sudo chmod 644 /etc/supervisord.conf
 sudo chown -R $CURRENT_USER:$CURRENT_USER /var/log
 sudo chmod -R 755 /var/log
 
-composer install
+composer install --no-interaction --prefer-dist --optimize-autoloader
 
 sudo -E /usr/bin/supervisord -c /etc/supervisord.conf
 

@@ -1,17 +1,18 @@
 services:
+
   nginx:
+    build:
+      context: ./docker/nginx
     container_name: ${CONTAINER_NAME_WEB:-web-toollab}
-    image: nginx:stable-alpine3.21-perl
     env_file: .env
     ports:
-      - "8000:80"
+      - "${CONTAINER_PORT_WEB}:80"
     volumes:
       - ./:/var/www
-      - ./docker/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template
     depends_on:
       - api
     networks:
-      - web
+      - toollab_network
 
   api:
     container_name: ${CONTAINER_NAME_API:-api-toollab}
@@ -29,35 +30,40 @@ services:
     depends_on:
       - db
     networks:
-      - web
+      - toollab_network
 
   db:
     container_name: ${CONTAINER_NAME_DB:-db-toollab}
     image: mariadb:11.4.5
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "${CONTAINER_PORT_DB}:3306"
     environment:
       MARIADB_DATABASE: ${DB_DATABASE}
       MARIADB_USER: ${DB_USERNAME}
       MARIADB_PASSWORD: ${DB_PASSWORD}
       MARIADB_ROOT_PASSWORD: ${DB_PASSWORD_ROOT}
     volumes:
-      - db_data:/var/lib/mysql
+      - persistent_db:/var/lib/mysql
     networks:
-      - web
+      - toollab_network
 
   maildev:
     image: maildev/maildev
+    container_name: ${CONTAINER_NAME_MAILDEV:-maildev}
     profiles: ["dev"]
     ports:
       - "1080:1080"
       - "1025:1025"
     networks:
-      - web
+      - toollab_network
+
 networks:
-  web:
-    driver: bridge
+  toollab_network:
+    external: true
+    name: ${NETWORK_NAME}
 
 volumes:
-  db_data:
+  persistent_db:
+    name: ${DB_VOLUME_NAME:-db_data}
+    driver: local
