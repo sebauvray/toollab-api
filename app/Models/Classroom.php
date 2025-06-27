@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Classroom extends Model
 {
-    use HasFactory;
+    use HasFactory, TrackChangesTrait;
 
     protected $fillable = [
         'school_id',
@@ -18,7 +19,9 @@ class Classroom extends Model
         'cursus_id',
         'level_id',
         'gender',
-        'telegram_link'
+        'telegram_link',
+        'created_by',
+        'updated_by',
     ];
 
     protected $appends = ['student_count', 'available_spots'];
