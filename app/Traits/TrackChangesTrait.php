@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Auth;
 
 trait TrackChangesTrait
 {
-    protected static function bootTracksChanges()
+    protected static function bootTrackChangesTrait()
     {
         static::creating(function ($model) {
             if (!$model->isDirty('created_by')) {
