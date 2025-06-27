@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('student_classrooms', function (Blueprint $table) {
-            $table->foreignId('created_by')->nullable()->after('enrollment_date')->constrained('users');
+            $table->unsignedBigInteger('created_by')->nullable()->after('enrollment_date');
         });
     }
 
@@ -22,7 +22,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('student_classrooms', function (Blueprint $table) {
-            $table->dropForeign(['created_by']);
             $table->dropColumn(['created_by']);
         });
     }
