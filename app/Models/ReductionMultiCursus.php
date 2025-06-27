@@ -2,18 +2,21 @@
 
 namespace App\Models;
 
+use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ReductionMultiCursus extends Model
 {
-    use HasFactory;
+    use HasFactory, TrackChangesTrait;
 
     protected $fillable = [
         'cursus_beneficiaire_id',
         'cursus_requis_id',
         'pourcentage_reduction',
-        'actif'
+        'actif',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
