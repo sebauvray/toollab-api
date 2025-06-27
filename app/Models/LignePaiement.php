@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class LignePaiement extends Model
 {
-    use HasFactory;
+    use HasFactory, TrackChangesTrait;
 
     protected $table = 'lignes_paiement';
 
@@ -15,7 +16,9 @@ class LignePaiement extends Model
         'paiement_id',
         'type_paiement',
         'montant',
-        'details'
+        'details',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
