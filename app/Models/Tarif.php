@@ -2,17 +2,20 @@
 
 namespace App\Models;
 
+use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Tarif extends Model
 {
-    use HasFactory;
+    use HasFactory, TrackChangesTrait;
 
     protected $fillable = [
         'cursus_id',
         'prix',
-        'actif'
+        'actif',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
