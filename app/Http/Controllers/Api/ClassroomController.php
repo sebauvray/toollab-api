@@ -201,6 +201,9 @@ class ClassroomController extends Controller
                                 'teacher_name' => $scheduleData['teacher_name'] ?? null
                             ]);
                             $updatedScheduleIds[] = $schedule->id;
+                            $classroom->update([
+                                'updated_by' => auth()->id(),
+                            ]);
                         }
                     } else {
                         $newSchedule = $classroom->schedules()->create([
