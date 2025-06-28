@@ -444,7 +444,7 @@ class FamilyController extends Controller
                     'role' => $userRole->role->name,
                     'classrooms' => $activeClassrooms,
                     'created_at' => $userRole->created_at,
-                    'infos_student' => count($infosStudent) > 0 ? $infosStudent : null
+                    'year_infos' => count($infosStudent) > 0 ? $infosStudent : null
                 ];
             });
 
