@@ -400,6 +400,40 @@ class FamilyController extends Controller
                         return $studentClassroom->classroom;
                     });
 
+                $studentInfoKeys = [
+                    'statut_scolaire',
+                    'abandon',
+                    'renvoi',
+                    'renvoi_motif',
+                    'passage',
+                    'redoublement',
+                    'autre',
+                    'commentaires',
+                    'classe_precedente'
+                ];
+
+                $infosStudent = collect($studentInfoKeys)
+                    ->filter(fn($key) => array_key_exists($key, $userInfos))
+                    ->mapWithKeys(fn($key) => [$key => $userInfos[$key]])
+                    ->toArray();
+
+                // Determine decision for the student
+                $decision = null;
+                if (!empty($userInfos['abandon'])) {
+                    $decision = 'abandon';
+                } elseif (!empty($userInfos['renvoi'])) {
+                    $decision = 'renvoi';
+                } elseif (!empty($userInfos['redoublement'])) {
+                    $decision = 'redouble';
+                } elseif (!empty($userInfos['passage'])) {
+                    $decision = 'passe';
+                } elseif (!empty($userInfos['autre'])) {
+                    $decision = 'autre';
+                }
+                if (!empty($infosStudent)) {
+                    $infosStudent['decision'] = $decision;
+                }
+
                 return [
                     'id' => $user->id,
                     'first_name' => $user->first_name,
@@ -409,7 +443,8 @@ class FamilyController extends Controller
                     'is_responsible' => $this->isUserResponsible($user->id, $userRole->roleable_id),
                     'role' => $userRole->role->name,
                     'classrooms' => $activeClassrooms,
-                    'created_at' => $userRole->created_at
+                    'created_at' => $userRole->created_at,
+                    'year_infos' => count($infosStudent) > 0 ? $infosStudent : null
                 ];
             });
 
