@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\TarificationController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserPasswordController;
+use App\Http\Controllers\Api\StatisticsController;
 use App\Http\Controllers\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
@@ -111,5 +112,13 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
         Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
         Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
+    });
+
+    Route::prefix('statistics')->middleware('checkrole:admin,director')->group(function () {
+        Route::get('/overview', [StatisticsController::class, 'overview']);
+        Route::get('/unpaid-families', [StatisticsController::class, 'unpaidFamilies']);
+        Route::post('/search-payments', [StatisticsController::class, 'searchPayments']);
+        Route::get('/enrollment-trends', [StatisticsController::class, 'enrollmentTrends']);
+        Route::get('/revenue-by-month', [StatisticsController::class, 'revenueByMonth']);
     });
 });

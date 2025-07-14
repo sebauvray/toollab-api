@@ -417,51 +417,78 @@ class ToollabSeeder extends Seeder
         
         foreach ($this->families as $familyData) {
             $family = $familyData['family'];
-            $numberOfStudents = count($familyData['students']);
             
-            if ($numberOfStudents === 0) continue;
+            // Count only enrolled students
+            $enrolledStudents = StudentClassroom::where('family_id', $family->id)
+                ->where('status', 'active')
+                ->count();
+            
+            if ($enrolledStudents === 0) continue;
             
             $basePrice = 270;
-            $totalAmount = $this->calculatePriceWithReduction($basePrice, $numberOfStudents);
+            $totalAmount = $this->calculatePriceWithReduction($basePrice, $enrolledStudents);
+            
+            // Determine if this family pays or not
+            $shouldPay = $this->faker->randomElement([true, true, true, true, false]); // 80% pay
+            
+            if (!$shouldPay) continue;
             
             $paiement = Paiement::create([
                 'family_id' => $family->id,
                 'created_by' => $director->id,
             ]);
             
-            $remainingAmount = $totalAmount;
-            $paymentCount = $this->faker->randomElement([1, 2, 3]);
+            // Some families get exonerations
+            $hasExoneration = $this->faker->randomElement([false, false, false, false, false, false, false, false, false, true]); // 10% exoneration
             
-            for ($i = 0; $i < $paymentCount; $i++) {
-                $isLastPayment = ($i === $paymentCount - 1);
-                $amount = $isLastPayment ? $remainingAmount : round($totalAmount / $paymentCount, 2);
-                
-                $paymentMethod = $this->faker->randomElement([
-                    'cheque', 'cheque', 'cheque', 'cheque', 'cheque', 'cheque',
-                    'espece', 'espece', 'espece',
-                    'carte'
-                ]);
-                
-                $details = null;
-                if ($paymentMethod === 'cheque') {
-                    $responsible = $familyData['responsible'];
-                    $details = [
-                        'numero' => (string)rand(1000000, 9999999),
-                        'banque' => $this->faker->randomElement(['BNP Paribas', 'Crédit Agricole', 'Société Générale', 'LCL']),
-                        'date' => Carbon::now()->subDays(rand(1, 30))->format('Y-m-d'),
-                        'emetteur' => $responsible->first_name . ' ' . $responsible->last_name,
-                    ];
-                }
-                
+            if ($hasExoneration) {
                 LignePaiement::create([
                     'paiement_id' => $paiement->id,
-                    'type_paiement' => $paymentMethod,
-                    'montant' => $amount,
-                    'details' => $details,
+                    'type_paiement' => 'exoneration',
+                    'montant' => $totalAmount,
+                    'details' => [
+                        'motif' => $this->faker->randomElement(['Situation sociale', 'Bourse', 'Personnel institut']),
+                    ],
                     'created_by' => $director->id,
                 ]);
+            } else {
+                // Partial payment
+                $paymentPercentage = $this->faker->randomElement([1, 1, 1, 0.5, 0.75]); // Most pay full, some partial
+                $amountToPay = round($totalAmount * $paymentPercentage, 2);
+                $remainingAmount = $amountToPay;
+                $paymentCount = $this->faker->randomElement([1, 2, 3]);
                 
-                $remainingAmount -= $amount;
+                for ($i = 0; $i < $paymentCount; $i++) {
+                    $isLastPayment = ($i === $paymentCount - 1);
+                    $amount = $isLastPayment ? $remainingAmount : round($amountToPay / $paymentCount, 2);
+                    
+                    $paymentMethod = $this->faker->randomElement([
+                        'cheque', 'cheque', 'cheque', 'cheque', 'cheque', 'cheque',
+                        'espece', 'espece', 'espece',
+                        'carte'
+                    ]);
+                    
+                    $details = null;
+                    if ($paymentMethod === 'cheque') {
+                        $responsible = $familyData['responsible'];
+                        $details = [
+                            'numero' => (string)rand(1000000, 9999999),
+                            'banque' => $this->faker->randomElement(['BNP Paribas', 'Crédit Agricole', 'Société Générale', 'LCL']),
+                            'date' => Carbon::now()->subDays(rand(1, 30))->format('Y-m-d'),
+                            'emetteur' => $responsible->first_name . ' ' . $responsible->last_name,
+                        ];
+                    }
+                    
+                    LignePaiement::create([
+                        'paiement_id' => $paiement->id,
+                        'type_paiement' => $paymentMethod,
+                        'montant' => $amount,
+                        'details' => $details,
+                        'created_by' => $director->id,
+                    ]);
+                    
+                    $remainingAmount -= $amount;
+                }
             }
         }
     }
