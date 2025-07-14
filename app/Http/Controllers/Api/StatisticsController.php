@@ -35,6 +35,7 @@ class StatisticsController extends Controller
                 'payments' => $this->getPaymentStats($schoolId),
                 'classes' => $this->getClassStats($schoolId),
                 'families' => $this->getFamilyStats($schoolId),
+                'cursus' => $this->getCursusStats($schoolId),
             ]
         ]);
     }
@@ -307,6 +308,55 @@ class StatisticsController extends Controller
         }
 
         return LignePaiement::where('paiement_id', $paiement->id)->sum('montant');
+    }
+
+    private function getCursusStats($schoolId)
+    {
+        // Récupérer tous les cursus de l'école
+        $cursusStats = [];
+        
+        // Récupérer tous les cursus utilisés dans les classes de cette école
+        $cursusIds = Classroom::where('school_id', $schoolId)
+            ->whereNotNull('cursus_id')
+            ->distinct()
+            ->pluck('cursus_id');
+        
+        foreach ($cursusIds as $cursusId) {
+            $cursus = Cursus::find($cursusId);
+            if (!$cursus) continue;
+            
+            // Capacité totale : somme des capacités de toutes les classes de ce cursus
+            $totalCapacity = Classroom::where('school_id', $schoolId)
+                ->where('cursus_id', $cursusId)
+                ->sum('size');
+            
+            // Nombre d'élèves inscrits : nombre d'inscriptions actives dans les classes de ce cursus
+            $enrolledStudents = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId, $cursusId) {
+                $query->where('school_id', $schoolId)
+                    ->where('cursus_id', $cursusId);
+            })
+            ->where('status', 'active')
+            ->count();
+            
+            // Calcul du taux de remplissage
+            $fillRate = $totalCapacity > 0 ? round(($enrolledStudents / $totalCapacity) * 100, 2) : 0;
+            
+            $cursusStats[] = [
+                'id' => $cursusId,
+                'name' => $cursus->name,
+                'total_capacity' => $totalCapacity,
+                'enrolled_students' => $enrolledStudents,
+                'available_places' => $totalCapacity - $enrolledStudents,
+                'fill_rate' => $fillRate,
+            ];
+        }
+        
+        // Trier par taux de remplissage décroissant
+        usort($cursusStats, function($a, $b) {
+            return $b['fill_rate'] <=> $a['fill_rate'];
+        });
+        
+        return $cursusStats;
     }
 
     public function unpaidFamilies(Request $request)
