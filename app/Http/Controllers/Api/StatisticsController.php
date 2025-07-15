@@ -362,6 +362,11 @@ class StatisticsController extends Controller
     public function unpaidFamilies(Request $request)
     {
         $schoolId = $request->input('school_id', session('current_school_id'));
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 10);
+        $search = $request->input('search', '');
+        $filter = $request->input('filter', ''); // 'unpaid' ou 'partial'
+        
         $families = Family::where('school_id', $schoolId)->get();
 
         $unpaidData = [];
@@ -371,16 +376,19 @@ class StatisticsController extends Controller
             $paidAmount = $this->getFamilyPaidAmount($family->id);
             
             if ($paidAmount < $expectedAmount) {
-                $responsibles = $family->responsibles()->get();
+                $responsibles = $family->responsibles()->with('infos')->get();
                 $students = $family->students()->with('infos')->get();
                 
                 $unpaidData[] = [
                     'id' => $family->id,
                     'responsibles' => $responsibles->map(function ($r) {
+                        // Récupérer le numéro de téléphone depuis UserInfo
+                        $phoneInfo = $r->infos()->where('key', 'phone')->first();
                         return [
                             'id' => $r->id,
                             'name' => $r->first_name . ' ' . $r->last_name,
                             'email' => $r->email,
+                            'phone' => $phoneInfo ? $phoneInfo->value : null,
                         ];
                     }),
                     'students_count' => $students->count(),
@@ -392,9 +400,63 @@ class StatisticsController extends Controller
             }
         }
 
+        // Apply filters
+        $unpaidFamilies = $unpaidData;
+        
+        // Apply search filter if provided
+        if (!empty($search)) {
+            $unpaidFamilies = array_filter($unpaidFamilies, function ($family) use ($search) {
+                $searchLower = strtolower($search);
+                
+                // Search in responsible names and emails
+                foreach ($family['responsibles'] as $responsible) {
+                    if (str_contains(strtolower($responsible['name']), $searchLower) ||
+                        str_contains(strtolower($responsible['email']), $searchLower)) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            });
+        }
+        
+        // Apply type filter if provided
+        if (!empty($filter)) {
+            $unpaidFamilies = array_filter($unpaidFamilies, function ($family) use ($filter) {
+                if ($filter === 'unpaid') {
+                    // Only families with paid = 0
+                    return $family['paid'] == 0;
+                } elseif ($filter === 'partial') {
+                    // Only families with paid > 0 and paid < expected
+                    return $family['paid'] > 0 && $family['paid'] < $family['expected'];
+                }
+                // If filter is not recognized, return all
+                return true;
+            });
+        }
+        
+        // Reset array keys after filtering
+        $unpaidFamilies = array_values($unpaidFamilies);
+
+        // Implement pagination
+        $total = count($unpaidFamilies);
+        $totalPages = ceil($total / $perPage);
+        $offset = ($page - 1) * $perPage;
+        
+        // Get paginated items
+        $paginatedItems = array_slice($unpaidFamilies, $offset, $perPage);
+
         return response()->json([
             'status' => 'success',
-            'data' => $unpaidData
+            'data' => [
+                'items' => $paginatedItems,
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'total_pages' => (int) $totalPages,
+                    'per_page' => (int) $perPage,
+                    'total' => $total
+                ]
+            ]
         ]);
     }
 
