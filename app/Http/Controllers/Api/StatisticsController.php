@@ -408,10 +408,11 @@ class StatisticsController extends Controller
             $unpaidFamilies = array_filter($unpaidFamilies, function ($family) use ($search) {
                 $searchLower = strtolower($search);
                 
-                // Search in responsible names and emails
+                // Search in responsible names, emails, and phone numbers
                 foreach ($family['responsibles'] as $responsible) {
                     if (str_contains(strtolower($responsible['name']), $searchLower) ||
-                        str_contains(strtolower($responsible['email']), $searchLower)) {
+                        str_contains(strtolower($responsible['email']), $searchLower) ||
+                        ($responsible['phone'] && str_contains(strtolower($responsible['phone']), $searchLower))) {
                         return true;
                     }
                 }
