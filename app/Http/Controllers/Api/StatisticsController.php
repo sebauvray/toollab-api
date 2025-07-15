@@ -586,6 +586,7 @@ class StatisticsController extends Controller
         $search = $request->input('search', '');
         $paymentType = $request->input('payment_type', '');
         $banks = $request->input('banks', '');
+        $exonerationType = $request->input('exoneration_type', '');
 
         $query = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
             $q->where('school_id', $schoolId);
@@ -599,10 +600,49 @@ class StatisticsController extends Controller
             'paiement.family.students'
         ]);
 
-        // Filtrer par recherche dans le numéro de chèque
+        // Filtrer par recherche
         if (!empty($search)) {
             $query->where(function ($q) use ($search) {
-                $q->where('details->numero', 'like', '%' . $search . '%');
+                // Pour les chèques, rechercher par numéro
+                $q->where(function ($subQ) use ($search) {
+                    $subQ->where('type_paiement', 'cheque')
+                         ->where('details->numero', 'like', '%' . $search . '%');
+                })
+                // Pour tous les types, rechercher dans les familles
+                ->orWhereHas('paiement.family', function ($familyQ) use ($search) {
+                    $familyQ->where(function ($q) use ($search) {
+                        // Rechercher les familles qui ont des responsables correspondants
+                        $q->whereExists(function ($query) use ($search) {
+                            $query->select(DB::raw(1))
+                                  ->from('users')
+                                  ->join('user_roles', function ($join) {
+                                      $join->on('users.id', '=', 'user_roles.user_id')
+                                           ->where('user_roles.roleable_type', '=', 'family');
+                                  })
+                                  ->join('roles', 'user_roles.role_id', '=', 'roles.id')
+                                  ->whereColumn('user_roles.roleable_id', 'families.id')
+                                  ->where('roles.slug', 'responsible')
+                                  ->where(function ($userQ) use ($search) {
+                                      $userQ->where('users.first_name', 'like', '%' . $search . '%')
+                                            ->orWhere('users.last_name', 'like', '%' . $search . '%')
+                                            ->orWhere(DB::raw("CONCAT(users.first_name, ' ', users.last_name)"), 'like', '%' . $search . '%');
+                                  });
+                        })
+                        // Ou rechercher par téléphone
+                        ->orWhereExists(function ($query) use ($search) {
+                            $query->select(DB::raw(1))
+                                  ->from('users')
+                                  ->join('user_roles', function ($join) {
+                                      $join->on('users.id', '=', 'user_roles.user_id')
+                                           ->where('user_roles.roleable_type', '=', 'family');
+                                  })
+                                  ->join('user_infos', 'users.id', '=', 'user_infos.user_id')
+                                  ->whereColumn('user_roles.roleable_id', 'families.id')
+                                  ->where('user_infos.key', 'phone')
+                                  ->where('user_infos.value', 'like', '%' . $search . '%');
+                        });
+                    });
+                });
             });
         }
 
@@ -685,18 +725,16 @@ class StatisticsController extends Controller
                 'amount' => $ligne->montant,
                 'type' => $ligne->type_paiement,
                 'payment_date' => $ligne->created_at->format('Y-m-d H:i'),
-                'details' => [
-                    'numero' => isset($details['numero']) ? $details['numero'] : null,
-                    'emetteur' => isset($details['emetteur']) ? $details['emetteur'] : null,
-                    'banque' => isset($details['banque']) ? $details['banque'] : null,
-                ],
+                'details' => $details,
                 'family' => $family ? [
                     'id' => $family->id,
                     'responsibles' => $responsibles,
                     'students' => $students,
                 ] : null,
+                'total_expected' => $family ? $this->calculateFamilyExpectedAmount($family) : 0,
             ];
         });
+
 
         return response()->json([
             'status' => 'success',
