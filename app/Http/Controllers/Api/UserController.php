@@ -42,13 +42,19 @@ class UserController extends Controller
                     }
                 }
 
+                $contextData = [
+                    'id' => $userRole->roleable->id,
+                    'name' => $contextName,
+                    'type' => class_basename($userRole->roleable_type)
+                ];
+
+                if ($userRole->roleable_type === 'school' && $userRole->roleable && $userRole->roleable->logo) {
+                    $contextData['logo'] = $userRole->roleable->logo;
+                }
+
                 return [
                     'role' => $userRole->role->name,
-                    'context' => [
-                        'id' => $userRole->roleable->id,
-                        'name' => $contextName,
-                        'type' => class_basename($userRole->roleable_type)
-                    ]
+                    'context' => $contextData
                 ];
             })->values()->toArray();
     }

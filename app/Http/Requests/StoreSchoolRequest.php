@@ -21,7 +21,7 @@ class StoreSchoolRequest extends FormRequest
             'zipcode' => 'nullable|string|max:20',
             'city' => 'nullable|string|max:255',
             'country' => 'nullable|string|max:255',
-            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10000',
+            'logo' => 'nullable|mimes:jpeg,png,jpg,gif,svg|max:10000',
             'access' => 'required|boolean',
 
             'director_first_name' => 'required|string|max:255',
@@ -56,8 +56,7 @@ class StoreSchoolRequest extends FormRequest
             'country.string' => 'Le pays doit être une chaîne de caractères.',
             'country.max' => 'Le pays ne peut pas dépasser 255 caractères.',
 
-            'logo.image' => 'Le logo doit être une image.',
-            'logo.mimes' => 'Le logo doit être au format jpeg, png, jpg ou gif.',
+            'logo.mimes' => 'Le logo doit être au format jpeg, png, jpg, gif ou svg.',
             'logo.max' => 'Le logo ne peut pas dépasser 10 Mo.',
 
             'access.required' => 'Le statut d\'accès est obligatoire.',
