@@ -120,5 +120,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/search-payments', [StatisticsController::class, 'searchPayments']);
         Route::get('/enrollment-trends', [StatisticsController::class, 'enrollmentTrends']);
         Route::get('/revenue-by-month', [StatisticsController::class, 'revenueByMonth']);
+        Route::get('/payments', [StatisticsController::class, 'payments']);
+        Route::get('/available-banks', [StatisticsController::class, 'availableBanks']);
     });
 });

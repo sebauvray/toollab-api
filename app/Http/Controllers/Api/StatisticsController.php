@@ -476,7 +476,7 @@ class StatisticsController extends Controller
             ->whereHas('paiement.family', function ($q) use ($schoolId) {
                 $q->where('school_id', $schoolId);
             })
-            ->with(['paiement.family.responsibles']);
+            ->with(['paiement.family.responsibles.infos']);
 
         switch ($searchType) {
             case 'cheque_number':
@@ -504,7 +504,13 @@ class StatisticsController extends Controller
                 'family' => [
                     'id' => $ligne->paiement->family->id,
                     'responsibles' => $ligne->paiement->family->responsibles->map(function ($r) {
-                        return $r->first_name . ' ' . $r->last_name;
+                        $phoneInfo = $r->infos()->where('key', 'phone')->first();
+                        return [
+                            'id' => $r->id,
+                            'name' => $r->first_name . ' ' . $r->last_name,
+                            'email' => $r->email,
+                            'phone' => $phoneInfo ? $phoneInfo->value : null,
+                        ];
                     }),
                 ],
             ];
@@ -569,6 +575,171 @@ class StatisticsController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => array_values($formatted)
+        ]);
+    }
+
+    public function payments(Request $request)
+    {
+        $schoolId = $request->input('school_id', session('current_school_id'));
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 20);
+        $search = $request->input('search', '');
+        $paymentType = $request->input('payment_type', '');
+        $banks = $request->input('banks', '');
+
+        $query = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
+            $q->where('school_id', $schoolId);
+        })
+        ->with([
+            'paiement.family.responsibles' => function($q) {
+                $q->with(['infos' => function($query) {
+                    $query->where('key', 'phone');
+                }]);
+            },
+            'paiement.family.students'
+        ]);
+
+        // Filtrer par recherche dans le numéro de chèque
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('details->numero', 'like', '%' . $search . '%');
+            });
+        }
+
+        // Filtrer par type de paiement
+        if (!empty($paymentType)) {
+            $query->where('type_paiement', $paymentType);
+        }
+
+        // Filtrer par banques (pour les chèques uniquement)
+        if (!empty($banks)) {
+            $banksArray = explode(',', $banks);
+            $query->where('type_paiement', 'cheque')
+                  ->where(function ($q) use ($banksArray) {
+                      foreach ($banksArray as $bank) {
+                          $q->orWhere('details->banque', 'like', '%' . trim($bank) . '%');
+                      }
+                  });
+        }
+
+        // Compter le total avant pagination
+        $total = $query->count();
+        $totalPages = ceil($total / $perPage);
+        $offset = ($page - 1) * $perPage;
+
+        // Appliquer la pagination et ordonner par date décroissante
+        $payments = $query->orderBy('created_at', 'desc')
+                         ->skip($offset)
+                         ->take($perPage)
+                         ->get();
+
+        // Formater les résultats
+        $formattedPayments = $payments->map(function ($ligne) {
+            $details = $ligne->details ?: [];
+            $family = $ligne->paiement ? $ligne->paiement->family : null;
+            
+            $responsibles = [];
+            $students = [];
+            
+            if ($family) {
+                // Charger manuellement les responsables
+                $responsibleUsers = User::whereHas('roles', function ($query) use ($family) {
+                    $query->where('roleable_type', 'family')
+                        ->where('roleable_id', $family->id)
+                        ->whereHas('role', function ($q) {
+                            $q->where('slug', 'responsible');
+                        });
+                })->with(['infos' => function($q) {
+                    $q->where('key', 'phone');
+                }])->get();
+                
+                $responsibles = $responsibleUsers->map(function ($r) {
+                    $phoneInfo = $r->infos->where('key', 'phone')->first();
+                    return [
+                        'id' => $r->id,
+                        'name' => trim($r->first_name . ' ' . $r->last_name),
+                        'email' => $r->email,
+                        'phone' => $phoneInfo ? $phoneInfo->value : null,
+                    ];
+                })->values()->toArray();
+                
+                // Charger les étudiants
+                $studentUsers = User::whereHas('roles', function ($query) use ($family) {
+                    $query->where('roleable_type', 'family')
+                        ->where('roleable_id', $family->id)
+                        ->whereHas('role', function ($q) {
+                            $q->where('slug', 'student');
+                        });
+                })->get();
+                
+                $students = $studentUsers->map(function ($s) {
+                    return [
+                        'id' => $s->id,
+                        'name' => trim($s->first_name . ' ' . $s->last_name),
+                    ];
+                })->values()->toArray();
+            }
+            
+            return [
+                'id' => $ligne->id,
+                'amount' => $ligne->montant,
+                'type' => $ligne->type_paiement,
+                'payment_date' => $ligne->created_at->format('Y-m-d H:i'),
+                'details' => [
+                    'numero' => isset($details['numero']) ? $details['numero'] : null,
+                    'emetteur' => isset($details['emetteur']) ? $details['emetteur'] : null,
+                    'banque' => isset($details['banque']) ? $details['banque'] : null,
+                ],
+                'family' => $family ? [
+                    'id' => $family->id,
+                    'responsibles' => $responsibles,
+                    'students' => $students,
+                ] : null,
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'items' => $formattedPayments,
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'total_pages' => (int) $totalPages,
+                    'per_page' => (int) $perPage,
+                    'total' => $total
+                ]
+            ]
+        ]);
+    }
+
+    public function availableBanks(Request $request)
+    {
+        $schoolId = $request->input('school_id', session('current_school_id'));
+
+        // Récupérer toutes les banques uniques pour les paiements par chèque
+        $banks = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
+            $q->where('school_id', $schoolId);
+        })
+        ->where('type_paiement', 'cheque')
+        ->whereNotNull('details->banque')
+        ->get()
+        ->pluck('details.banque')
+        ->unique()
+        ->filter()
+        ->values()
+        ->toArray(); // Convertir en array
+
+        // S'assurer qu'on a des banques, sinon retourner une liste par défaut
+        if (empty($banks)) {
+            $banks = ['BNP Paribas', 'Crédit Agricole', 'Société Générale', 'LCL', 'CIC'];
+        }
+
+        // Trier les banques
+        sort($banks);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $banks
         ]);
     }
 }
