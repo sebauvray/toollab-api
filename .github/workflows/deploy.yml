@@ -50,3 +50,4 @@ jobs:
             TARGET_DIR=${{ github.event.inputs.environment == 'production' && '/home/githubdev/production/api' || '/home/githubdev/staging/api' }}
             cd $TARGET_DIR
             docker compose -f docker-compose.yml -f docker-compose-prod.yml up -d --build
+            docker compose exec -T php php artisan storage:link || true
