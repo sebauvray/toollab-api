@@ -1,6 +1,6 @@
 services:
   nginx:
-    ports: []
+    ports: !reset []
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web_toollab-${APP_ENV}.rule=Host(`${DOMAIN}`)"
