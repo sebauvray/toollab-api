@@ -230,19 +230,22 @@ class StatisticsController extends Controller
             $paidAmount = $this->getFamilyPaidAmount($family->id);
             
             if ($expectedAmount > 0) {
-                if ($paidAmount == 0) {
+                if ($paidAmount < $expectedAmount) {
                     $unpaidFamilies[] = [
-                        'id' => $family->id,
-                        'expected' => round($expectedAmount),
-                        'paid' => 0,
-                    ];
-                } elseif ($paidAmount < $expectedAmount) {
-                    $partiallyPaidFamilies[] = [
                         'id' => $family->id,
                         'expected' => round($expectedAmount),
                         'paid' => round($paidAmount),
                         'remaining' => round($expectedAmount - $paidAmount),
                     ];
+                    
+                    if ($paidAmount > 0) {
+                        $partiallyPaidFamilies[] = [
+                            'id' => $family->id,
+                            'expected' => round($expectedAmount),
+                            'paid' => round($paidAmount),
+                            'remaining' => round($expectedAmount - $paidAmount),
+                        ];
+                    }
                 } elseif ($paidAmount >= $expectedAmount) {
                     $paidFamilies[] = [
                         'id' => $family->id,
