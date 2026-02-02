@@ -15,4 +15,4 @@ services:
       dockerfile: docker/php/Dockerfile
       target: prod
   db:
-    ports: []
+    ports: !reset []
