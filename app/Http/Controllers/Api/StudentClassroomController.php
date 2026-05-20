@@ -25,7 +25,7 @@ class StudentClassroomController extends Controller
         DB::beginTransaction();
 
         try {
-            $classroom = Classroom::find($request->classroom_id);
+            $classroom = Classroom::lockForUpdate()->find($request->classroom_id);
             $family = Family::find($request->family_id);
             $student = User::find($request->student_id);
 

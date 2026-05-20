@@ -648,6 +648,32 @@ class FamilyController extends Controller
 
         try {
             $user = User::findOrFail($request->user_id);
+
+            $userIsInSchool = UserRole::where('user_id', $user->id)
+                ->where(function ($q) use ($family) {
+                    $familyIds = Family::query()->withoutGlobalScopes()
+                        ->where('school_id', $family->school_id)->pluck('id');
+                    $classroomIds = \App\Models\Classroom::query()->withoutGlobalScopes()
+                        ->where('school_id', $family->school_id)->pluck('id');
+                    $q->where(function ($q2) use ($family) {
+                        $q2->where('roleable_type', 'school')->where('roleable_id', $family->school_id);
+                    })->orWhere(function ($q2) use ($familyIds) {
+                        $q2->where('roleable_type', 'family')->whereIn('roleable_id', $familyIds);
+                    })->orWhere(function ($q2) use ($classroomIds) {
+                        $q2->where('roleable_type', 'classroom')->whereIn('roleable_id', $classroomIds);
+                    });
+                })->exists();
+
+            if (!$userIsInSchool) {
+                \Illuminate\Support\Facades\Log::warning('FamilyController.addResponsible: target user not in school', [
+                    'caller_id' => auth()->id(),
+                    'family_id' => $family->id,
+                    'target_user_id' => $user->id,
+                    'school_id' => $family->school_id,
+                ]);
+                return response()->json(['status' => 'error', 'message' => 'Ressource introuvable'], 404);
+            }
+
             $responsibleRole = Role::where('slug', 'responsible')->firstOrFail();
 
             $existingRole = UserRole::where('user_id', $user->id)

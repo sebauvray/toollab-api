@@ -193,6 +193,14 @@ class SchoolController extends Controller
      */
     public function destroy(School $school)
     {
+        if (!auth()->user()?->is_super_admin) {
+            \Illuminate\Support\Facades\Log::warning('SchoolController.destroy: forbidden', [
+                'caller_id' => auth()->id(),
+                'school_id' => $school->id,
+            ]);
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
         if ($school->logo) {
             Storage::disk('public')->delete($school->logo);
         }

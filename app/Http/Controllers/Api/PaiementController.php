@@ -49,36 +49,39 @@ class PaiementController extends Controller
         ]);
 
         try {
-            $details = $this->paiementService->getDetailsPaiement($family);
-            $previousResteAPayer = $details['reste_a_payer'];
-            $nouveauMontantPaye = $details['montant_paye'] + $request->montant;
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $family) {
+                Family::lockForUpdate()->find($family->id);
+                $details = $this->paiementService->getDetailsPaiement($family);
+                $previousResteAPayer = $details['reste_a_payer'];
+                $nouveauMontantPaye = $details['montant_paye'] + $request->montant;
 
-            if ($nouveauMontantPaye > $details['montant_total']) {
+                if ($nouveauMontantPaye > $details['montant_total']) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Le montant total payé ne peut pas dépasser le montant dû'
+                    ], 422);
+                }
+
+                $paiement = $this->paiementService->getOrCreatePaiement($family, $request->user()->id);
+                $ligne = $this->paiementService->ajouterLignePaiement($paiement, $request->all());
+
+                CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
+
                 return response()->json([
-                    'status' => 'error',
-                    'message' => 'Le montant total payé ne peut pas dépasser le montant dû'
-                ], 422);
-            }
-
-            $paiement = $this->paiementService->getOrCreatePaiement($family, $request->user()->id);
-            $ligne = $this->paiementService->ajouterLignePaiement($paiement, $request->all());
-
-            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Paiement ajouté avec succès',
-                'data' => [
-                    'ligne' => $ligne,
-                    'nouveau_total' => $nouveauMontantPaye,
-                    'reste_a_payer' => $details['montant_total'] - $nouveauMontantPaye
-                ]
-            ]);
+                    'status' => 'success',
+                    'message' => 'Paiement ajouté avec succès',
+                    'data' => [
+                        'ligne' => $ligne,
+                        'nouveau_total' => $nouveauMontantPaye,
+                        'reste_a_payer' => $details['montant_total'] - $nouveauMontantPaye
+                    ]
+                ]);
+            });
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Paiement.ajouterLigne failed', ['exception' => $e]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de l\'ajout du paiement',
-                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
