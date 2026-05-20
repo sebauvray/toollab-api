@@ -211,9 +211,7 @@ class FamilyController extends Controller
             $this->updateOrCreateUserInfo($user, self::KEY_ZIPCODE, $request->zipcode);
             $this->updateOrCreateUserInfo($user, self::KEY_CITY, $request->city);
 
-            $family = Family::create([
-                'school_id' => $schoolId
-            ]);
+            $family = Family::create();
 
             $family->userRoles()->create([
                 'user_id' => $user->id,
@@ -254,10 +252,10 @@ class FamilyController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Illuminate\Support\Facades\Log::error('Family.store failed', ['exception' => $e]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la création de la famille',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -339,7 +337,7 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la mise à jour du responsable',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -549,7 +547,7 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de l\'ajout des élèves',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -585,7 +583,7 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la mise à jour de l\'élève',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -607,7 +605,7 @@ class FamilyController extends Controller
 
             return response()->json([
                 'message' => 'Une erreur est survenue lors de la suppression.',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -656,7 +654,7 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -763,7 +761,7 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de l\'ajout du responsable',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -875,7 +873,7 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la mise à jour du responsable',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

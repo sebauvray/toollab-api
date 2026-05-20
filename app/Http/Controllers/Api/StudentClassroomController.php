@@ -118,7 +118,7 @@ class StudentClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de l\'inscription',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -163,7 +163,7 @@ class StudentClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la suppression',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -209,7 +209,7 @@ class StudentClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

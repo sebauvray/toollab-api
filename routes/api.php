@@ -16,12 +16,16 @@ use App\Http\Controllers\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
 // Public
-Route::post('login', [AuthController::class, 'login']);
-Route::post('forgot-password', [PasswordResetController::class, 'forgotPassword']);
-Route::post('reset-password', [PasswordResetController::class, 'resetPassword']);
-Route::post('check-reset-token', [PasswordResetController::class, 'checkResetToken']);
-Route::post('/check-invitation-token', [InvitationController::class, 'checkInvitationToken']);
-Route::post('/set-password', [InvitationController::class, 'setPassword']);
+Route::middleware('throttle:login')->post('login', [AuthController::class, 'login']);
+Route::middleware('throttle:password-reset')->group(function () {
+    Route::post('forgot-password', [PasswordResetController::class, 'forgotPassword']);
+    Route::post('reset-password', [PasswordResetController::class, 'resetPassword']);
+});
+Route::middleware('throttle:token-check')->group(function () {
+    Route::post('check-reset-token', [PasswordResetController::class, 'checkResetToken']);
+    Route::post('/check-invitation-token', [InvitationController::class, 'checkInvitationToken']);
+    Route::post('/set-password', [InvitationController::class, 'setPassword']);
+});
 
 Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
@@ -31,7 +35,6 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.delete');
-    Route::put('/users/{user}/info', [UserController::class, 'updateUserInfo']);
     Route::post('/users/change-password', [UserPasswordController::class, 'changePassword']);
 
     Route::get('/schools', [SchoolController::class, 'index']);
@@ -51,6 +54,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/by-context', [UserController::class, 'getUsersByContextAndRole']);
             Route::get('/school/{school}', [UserController::class, 'getSchoolUsers']);
             Route::get('/classroom/{classroom}', [UserController::class, 'getClassroomUsers']);
+            Route::put('/{user}/info', [UserController::class, 'updateUserInfo']);
         });
 
         Route::post('/users/create-staff', [StaffController::class, 'createStaffUser']);

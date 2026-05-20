@@ -4,16 +4,122 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Classroom;
 use App\Models\User;
+use App\Models\UserRole;
 use App\Models\School;
 use App\Models\UserInfo;
+use App\Models\Family;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
+    /**
+     * True si le caller peut lire/modifier $target.
+     * Règles: super-admin, ou self, ou (caller=director|admin) ET target a un rôle dans la même école.
+     */
+    private function canManageUser(User $target): bool
+    {
+        $caller = auth()->user();
+        if (!$caller) return false;
+        if ($caller->is_super_admin) return true;
+        if ($caller->id === $target->id) return true;
+
+        $callerAdminSchoolIds = UserRole::query()
+            ->where('user_id', $caller->id)
+            ->where('roleable_type', 'school')
+            ->whereHas('role', fn($q) => $q->whereIn('slug', ['director', 'admin']))
+            ->pluck('roleable_id');
+
+        if ($callerAdminSchoolIds->isEmpty()) return false;
+
+        $targetSchoolIdsDirect = UserRole::query()
+            ->where('user_id', $target->id)
+            ->where('roleable_type', 'school')
+            ->pluck('roleable_id');
+
+        $targetFamilyIds = UserRole::query()
+            ->where('user_id', $target->id)
+            ->where('roleable_type', 'family')
+            ->pluck('roleable_id');
+        $targetSchoolIdsViaFamily = Family::query()->withoutGlobalScopes()
+            ->whereIn('id', $targetFamilyIds)->pluck('school_id');
+
+        $targetClassroomIds = UserRole::query()
+            ->where('user_id', $target->id)
+            ->where('roleable_type', 'classroom')
+            ->pluck('roleable_id');
+        $targetSchoolIdsViaClassroom = Classroom::query()->withoutGlobalScopes()
+            ->whereIn('id', $targetClassroomIds)->pluck('school_id');
+
+        $targetSchoolIds = $targetSchoolIdsDirect
+            ->concat($targetSchoolIdsViaFamily)
+            ->concat($targetSchoolIdsViaClassroom)
+            ->unique();
+
+        return $callerAdminSchoolIds->intersect($targetSchoolIds)->isNotEmpty();
+    }
+
+    private function denyAccess(string $context, array $extra = []): JsonResponse
+    {
+        Log::warning('UserController: access denied', array_merge([
+            'context' => $context,
+            'caller_id' => auth()->id(),
+        ], $extra));
+        return response()->json(['message' => 'Accès refusé'], 403);
+    }
+
+    private function callerHasSchoolRole(int $schoolId, array $slugs): bool
+    {
+        return UserRole::query()
+            ->where('user_id', auth()->id())
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $schoolId)
+            ->whereHas('role', fn($q) => $q->whereIn('slug', $slugs))
+            ->exists();
+    }
+
+    /**
+     * Plus permissif que canManageUser : autorise tout user qui partage
+     * l'école courante avec $target (direct, via famille ou classroom).
+     * Pour les écritures du quotidien (infos contact d'un membre famille, etc.).
+     */
+    private function canTouchUserInCurrentSchool(User $target): bool
+    {
+        $caller = auth()->user();
+        if (!$caller) return false;
+        if ($caller->is_super_admin) return true;
+        if ($caller->id === $target->id) return true;
+
+        $schoolId = currentSchoolId();
+        if ($schoolId === null) return false;
+
+        if (!$this->userBelongsToSchool($caller->id, $schoolId)) return false;
+        return $this->userBelongsToSchool($target->id, $schoolId);
+    }
+
+    private function userBelongsToSchool(int $userId, int $schoolId): bool
+    {
+        if (UserRole::where('user_id', $userId)
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $schoolId)
+            ->exists()) return true;
+
+        $familyIds = Family::query()->withoutGlobalScopes()
+            ->where('school_id', $schoolId)->pluck('id');
+        if ($familyIds->isNotEmpty() && UserRole::where('user_id', $userId)
+            ->where('roleable_type', 'family')
+            ->whereIn('roleable_id', $familyIds)->exists()) return true;
+
+        $classroomIds = Classroom::query()->withoutGlobalScopes()
+            ->where('school_id', $schoolId)->pluck('id');
+        return $classroomIds->isNotEmpty() && UserRole::where('user_id', $userId)
+            ->where('roleable_type', 'classroom')
+            ->whereIn('roleable_id', $classroomIds)->exists();
+    }
 
     /**
      * Format roles for a specific context type
@@ -90,9 +196,13 @@ class UserController extends Controller
      */
     public function index()
     {
+        $caller = auth()->user();
         $schoolId = currentSchoolId();
         if ($schoolId === null) {
             return response()->json(['message' => 'Requête invalide'], 400);
+        }
+        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($schoolId, ['director', 'admin'])) {
+            return $this->denyAccess('user.index');
         }
 
         $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
@@ -120,6 +230,9 @@ class UserController extends Controller
      */
     public function store(StoreUserRequest $request)
     {
+        if (!auth()->user()?->is_super_admin) {
+            return $this->denyAccess('user.store');
+        }
         $validatedData = $request->validated();
 
         return User::create([
@@ -133,41 +246,33 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user)
     {
-        $validatedData = $request->validated();
-
-        $dataToUpdate = [
-            'first_name' => $validatedData['first_name'],
-            'last_name' => $validatedData['last_name'],
-            'email' => $validatedData['email'],
-        ];
-
-        if (!empty($validatedData['password'])) {
-            $dataToUpdate['password'] = bcrypt($validatedData['password']);
+        if (!$this->canManageUser($user)) {
+            return $this->denyAccess('user.update', ['target_id' => $user->id]);
         }
 
-        $user->update($dataToUpdate);
+        $user->update($request->validated());
 
         return $user;
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(User $user)
     {
+        if (!$this->canManageUser($user)) {
+            return $this->denyAccess('user.show', ['target_id' => $user->id]);
+        }
         return $user->load('roles');
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(User $user): void
+    public function destroy(User $user)
     {
-        $user::findOrFail($user->id)->delete();
+        if (!$this->canManageUser($user)) {
+            return $this->denyAccess('user.destroy', ['target_id' => $user->id]);
+        }
+        if ($user->is_super_admin) {
+            return $this->denyAccess('user.destroy.super_admin', ['target_id' => $user->id]);
+        }
+        $user->delete();
+        return response()->json(null, 204);
     }
 
 
@@ -176,6 +281,10 @@ class UserController extends Controller
      */
     public function getAllUsersWithRoles()
     {
+        if (!auth()->user()?->is_super_admin) {
+            return $this->denyAccess('user.all_with_roles');
+        }
+
         $users = User::with(['roles.role', 'roles.roleable'])->get()
             ->map(function ($user) {
                 return [
@@ -199,6 +308,10 @@ class UserController extends Controller
      */
     public function updateUserInfo(Request $request, User $user)
     {
+        if (!$this->canTouchUserInCurrentSchool($user)) {
+            return $this->denyAccess('user.update_info', ['target_id' => $user->id]);
+        }
+
         $request->validate([
             'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:255',
@@ -237,6 +350,9 @@ class UserController extends Controller
      */
     public function getUserRoles(User $user)
     {
+        if (!$this->canManageUser($user)) {
+            return $this->denyAccess('user.roles', ['target_id' => $user->id]);
+        }
         return [
             'user' => [
                 'id' => $user->id,
@@ -258,9 +374,33 @@ class UserController extends Controller
     {
         $request->validate([
             'context_type' => 'required|in:school,family,classroom',
-            'context_id' => 'required|integer',
-            'role_name' => 'required|string'
+            'context_id' => 'required|integer|min:1',
+            'role_name' => 'required|string|max:100',
         ]);
+
+        $schoolId = currentSchoolId();
+        if ($schoolId === null) {
+            return $this->denyAccess('user.by_context.no_school');
+        }
+
+        $type = $request->context_type;
+        $contextId = (int) $request->context_id;
+
+        $allowed = match ($type) {
+            'school' => $contextId === $schoolId,
+            'family' => Family::query()->withoutGlobalScopes()
+                ->whereKey($contextId)->where('school_id', $schoolId)->exists(),
+            'classroom' => Classroom::query()->withoutGlobalScopes()
+                ->whereKey($contextId)->where('school_id', $schoolId)->exists(),
+        };
+
+        if (!$allowed && !auth()->user()->is_super_admin) {
+            return $this->denyAccess('user.by_context', [
+                'requested_type' => $type,
+                'requested_id' => $contextId,
+                'current_school_id' => $schoolId,
+            ]);
+        }
 
         return User::whereHas('roles', function ($query) use ($request) {
             $query->whereHas('role', function ($q) use ($request) {
@@ -276,6 +416,14 @@ class UserController extends Controller
      */
     public function getClassroomUsers(Classroom $classroom): JsonResponse
     {
+        if ($classroom->school_id !== currentSchoolId()) {
+            return $this->denyAccess('user.classroom_users.cross_tenant', ['classroom_id' => $classroom->id]);
+        }
+        $caller = auth()->user();
+        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($classroom->school_id, ['director', 'admin'])) {
+            return $this->denyAccess('user.classroom_users.no_role', ['classroom_id' => $classroom->id]);
+        }
+
         $users = $classroom->userRoles()
             ->with(['user', 'role'])
             ->get()
@@ -305,7 +453,12 @@ class UserController extends Controller
     public function getSchoolUsers(School $school)
     {
         if ($school->id !== currentSchoolId()) {
-            return response()->json(['message' => 'Accès refusé'], 403);
+            return $this->denyAccess('user.school_users.cross_tenant', ['requested' => $school->id]);
+        }
+
+        $caller = auth()->user();
+        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($school->id, ['director', 'admin'])) {
+            return $this->denyAccess('user.school_users.no_role', ['school_id' => $school->id]);
         }
 
         $users = $school->userRoles()
@@ -393,7 +546,7 @@ class UserController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage(),
+                'message' => 'Une erreur est survenue',
                 'data' => [
                     'students' => [],
                     'total' => 0

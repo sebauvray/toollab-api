@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\SchoolContext;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SuperAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -24,6 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'superadmin' => SuperAdmin::class,
             'school' => SchoolContext::class,
         ]);
+
+        $middleware->append(SecurityHeaders::class);
 
         // SchoolContext doit passer avant SubstituteBindings sinon le Route
         // Model Binding s'exécute sans contexte et le global scope renvoie 0 ligne.

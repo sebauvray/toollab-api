@@ -31,6 +31,9 @@ class UserPasswordController extends Controller
         $user->password = Hash::make($request->password);
         $user->save();
 
+        $currentTokenId = $request->user()->currentAccessToken()?->id;
+        $user->tokens()->when($currentTokenId, fn($q) => $q->where('id', '!=', $currentTokenId))->delete();
+
         return response()->json([
             'message' => 'Mot de passe modifié avec succès',
         ]);

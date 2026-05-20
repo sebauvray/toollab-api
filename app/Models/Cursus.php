@@ -15,11 +15,8 @@ class Cursus extends Model
 
     protected $fillable = [
         'name',
-        'school_id',
         'progression',
         'levels_count',
-        'created_by',
-        'updated_by',
     ];
 
     public function school()

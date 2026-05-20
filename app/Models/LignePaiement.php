@@ -17,9 +17,7 @@ class LignePaiement extends Model
         'type_paiement',
         'montant',
         'details',
-        'created_by',
-        'updated_by',
-    ];
+            ];
 
     protected $casts = [
         'montant' => 'integer',

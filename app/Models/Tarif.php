@@ -14,9 +14,7 @@ class Tarif extends Model
         'cursus_id',
         'prix',
         'actif',
-        'created_by',
-        'updated_by',
-    ];
+            ];
 
     protected $casts = [
         'prix' => 'integer',

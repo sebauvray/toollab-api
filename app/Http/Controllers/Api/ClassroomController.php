@@ -100,7 +100,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Classe non trouvée',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 404);
         }
     }
@@ -146,7 +146,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la création de la classe',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -233,7 +233,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la mise à jour de la classe',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -254,7 +254,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la suppression de la classe',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -291,7 +291,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de l\'ajout de l\'élève',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -312,7 +312,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors du retrait de l\'élève',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

@@ -78,6 +78,8 @@ class InvitationController extends Controller
         $user->password = Hash::make($request->password);
         $user->save();
 
+        $user->tokens()->delete();
+
         $token->delete();
 
         return response()->json([

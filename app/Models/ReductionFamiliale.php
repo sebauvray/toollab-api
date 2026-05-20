@@ -15,9 +15,7 @@ class ReductionFamiliale extends Model
         'nombre_eleves_min',
         'pourcentage_reduction',
         'actif',
-        'created_by',
-        'updated_by',
-    ];
+            ];
 
     protected $casts = [
         'pourcentage_reduction' => 'decimal:2',

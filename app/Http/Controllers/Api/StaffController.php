@@ -94,11 +94,34 @@ class StaffController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'school_id' => 'required|exists:schools,id',
-            'role_name' => 'required|string'
+            'role_name' => 'required|string|max:100',
         ]);
 
+        $caller = auth()->user();
+        $schoolId = (int) $request->school_id;
+
+        if (!$caller || (!$caller->is_super_admin && (
+            currentSchoolId() !== $schoolId ||
+            !UserRole::where('user_id', $caller->id)
+                ->where('roleable_type', 'school')
+                ->where('roleable_id', $schoolId)
+                ->whereHas('role', fn($q) => $q->where('slug', 'director'))
+                ->exists()
+        ))) {
+            \Illuminate\Support\Facades\Log::warning('StaffController.removeUserRole: forbidden', [
+                'caller_id' => $caller?->id,
+                'target_user_id' => $request->user_id,
+                'school_id' => $schoolId,
+            ]);
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
+        if ((int) $request->user_id === $caller->id) {
+            return response()->json(['message' => 'Vous ne pouvez pas retirer votre propre rôle.'], 422);
+        }
+
         $user = User::findOrFail($request->user_id);
-        $school = School::findOrFail($request->school_id);
+        $school = School::findOrFail($schoolId);
 
         DB::beginTransaction();
 
@@ -141,7 +164,7 @@ class StaffController extends Controller
             DB::rollBack();
             return response()->json([
                 'message' => 'Une erreur est survenue lors de la suppression du rôle',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

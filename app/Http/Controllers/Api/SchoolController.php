@@ -121,7 +121,7 @@ class SchoolController extends Controller
 
             return response()->json([
                 'message' => 'Une erreur est survenue lors de la création de l\'école',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

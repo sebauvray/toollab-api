@@ -63,6 +63,10 @@ class PasswordResetController extends Controller
             'password' => Hash::make($password),
             'remember_token' => Str::random(60),
         ])->save();
+
+        if (method_exists($user, 'tokens')) {
+            $user->tokens()->delete();
+        }
     }
 
     private function isTokenExpired($createdAt)

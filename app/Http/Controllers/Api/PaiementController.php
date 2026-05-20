@@ -31,7 +31,7 @@ class PaiementController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la récupération des détails de paiement',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -78,7 +78,7 @@ class PaiementController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de l\'ajout du paiement',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -138,7 +138,7 @@ class PaiementController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la modification du paiement',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -175,7 +175,7 @@ class PaiementController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la suppression du paiement',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

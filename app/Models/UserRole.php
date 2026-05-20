@@ -16,9 +16,7 @@ class UserRole extends Model
         'role_id',
         'roleable_id',
         'roleable_type',
-        'created_by',
-        'updated_by',
-    ];
+            ];
 
     public function user()
     {

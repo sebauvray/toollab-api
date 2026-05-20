@@ -15,9 +15,7 @@ class ReductionMultiCursus extends Model
         'cursus_requis_id',
         'pourcentage_reduction',
         'actif',
-        'created_by',
-        'updated_by',
-    ];
+            ];
 
     protected $casts = [
         'pourcentage_reduction' => 'decimal:2',

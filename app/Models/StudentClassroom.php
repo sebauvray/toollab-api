@@ -16,7 +16,6 @@ class StudentClassroom extends Model
         'family_id',
         'status',
         'enrollment_date',
-        'created_by',
     ];
 
     protected $casts = [

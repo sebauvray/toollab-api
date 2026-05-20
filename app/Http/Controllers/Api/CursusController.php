@@ -89,7 +89,7 @@ class CursusController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la création du cursus',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -141,7 +141,7 @@ class CursusController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la mise à jour du cursus',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }
@@ -176,7 +176,7 @@ class CursusController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la suppression du cursus',
-                'error' => $e->getMessage()
+                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

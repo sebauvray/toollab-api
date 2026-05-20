@@ -12,9 +12,7 @@ class Family extends Model
 {
     use HasFactory, BelongsToSchool;
 
-    protected $fillable = [
-        'school_id'
-    ];
+    protected $fillable = [];
 
     public function comments(): HasMany
     {

@@ -12,7 +12,6 @@ class Classroom extends Model
     use HasFactory, TrackChangesTrait, BelongsToSchool;
 
     protected $fillable = [
-        'school_id',
         'name',
         'years',
         'type',
@@ -21,8 +20,6 @@ class Classroom extends Model
         'level_id',
         'gender',
         'telegram_link',
-        'created_by',
-        'updated_by',
     ];
 
     protected $appends = ['student_count', 'available_spots'];
