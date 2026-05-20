@@ -17,10 +17,6 @@ class CursusController extends Controller
     {
         $query = Cursus::with(['levels', 'classrooms']);
 
-        if ($request->has('school_id')) {
-            $query->where('school_id', $request->school_id);
-        }
-
         $perPage = $request->get('per_page', 10);
         $cursuses = $query->paginate($perPage);
 
@@ -66,7 +62,6 @@ class CursusController extends Controller
             $cursus = Cursus::create([
                 'name' => $validatedData['name'],
                 'progression' => $validatedData['progression'],
-                'school_id' => $validatedData['school_id'],
                 'levels_count' => $validatedData['progression'] === 'levels' ? $validatedData['levels_count'] : 0
             ]);
 
@@ -153,23 +148,6 @@ class CursusController extends Controller
 
     public function destroy(Cursus $cursus)
     {
-        $user = Auth::user();
-
-        $userSchoolIds = $user->roles()
-            ->where('roleable_type', 'school')
-            ->whereHas('role', function ($query) {
-                $query->whereIn('slug', ['director', 'admin']);
-            })
-            ->pluck('roleable_id')
-            ->toArray();
-
-        if (!in_array($cursus->school_id, $userSchoolIds)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Vous n\'êtes pas autorisé à supprimer ce cursus'
-            ], 403);
-        }
-
         DB::beginTransaction();
 
         try {

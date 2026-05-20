@@ -2,28 +2,24 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToSchool;
 use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Cursus extends Model
 {
-    use HasFactory, TrackChangesTrait;
+    use HasFactory, TrackChangesTrait, BelongsToSchool;
 
     protected $table = 'cursus';
 
     protected $fillable = [
         'name',
-        'description',
-        'is_active',
         'school_id',
         'progression',
+        'levels_count',
         'created_by',
         'updated_by',
-    ];
-
-    protected $casts = [
-        'is_active' => 'boolean'
     ];
 
     public function school()

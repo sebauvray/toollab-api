@@ -23,17 +23,41 @@ class UserController extends Controller
      */
     private function formatRoles(User $user, string $type): array
     {
-        return $user->roles
-            ->where('roleable_type', $type)
-            ->map(function ($userRole) {
-                $contextName = $userRole->roleable->name ?? 'Sans nom';
+        $userRoles = $user->roles->where('roleable_type', $type);
 
-                if ($userRole->roleable_type === 'family') {
+        // withoutGlobalScopes : l'endpoint /users/{id}/roles est appelé AVANT
+        // qu'une école soit sélectionnée, donc le scope BelongsToSchool filtrerait
+        // tout à 0 — on le contourne pour lister toutes les appartenances.
+        $modelMap = [
+            'school' => \App\Models\School::class,
+            'family' => \App\Models\Family::class,
+            'classroom' => \App\Models\Classroom::class,
+        ];
+
+        $contextsByType = [];
+        $modelClass = $modelMap[$type] ?? null;
+        if ($modelClass) {
+            $ids = $userRoles->pluck('roleable_id')->unique()->all();
+            $contextsByType = $modelClass::query()
+                ->when(method_exists($modelClass, 'addGlobalScope'), function ($q) {
+                    return $q->withoutGlobalScopes();
+                })
+                ->whereIn('id', $ids)
+                ->get()
+                ->keyBy('id');
+        }
+
+        return $userRoles
+            ->map(function ($userRole) use ($type, $contextsByType) {
+                $context = $contextsByType[$userRole->roleable_id] ?? null;
+                $contextName = $context?->name ?? 'Sans nom';
+
+                if ($type === 'family') {
                     $responsibleUser = User::whereHas('roles', function ($query) use ($userRole) {
                         $query->where('roleable_id', $userRole->roleable_id)
                             ->where('roleable_type', 'family')
                             ->whereHas('role', function ($q) {
-                                $q->where('name', 'Responsible');
+                                $q->where('slug', 'responsible');
                             });
                     })->first();
 
@@ -43,20 +67,22 @@ class UserController extends Controller
                 }
 
                 $contextData = [
-                    'id' => $userRole->roleable->id,
+                    'id' => $userRole->roleable_id,
                     'name' => $contextName,
-                    'type' => class_basename($userRole->roleable_type)
+                    'type' => class_basename($userRole->roleable_type),
                 ];
 
-                if ($userRole->roleable_type === 'school' && $userRole->roleable && $userRole->roleable->logo) {
-                    $contextData['logo'] = $userRole->roleable->logo;
+                if ($type === 'school' && $context && !empty($context->logo)) {
+                    $contextData['logo'] = $context->logo;
                 }
 
                 return [
                     'role' => $userRole->role->name,
-                    'context' => $contextData
+                    'context' => $contextData,
                 ];
-            })->values()->toArray();
+            })
+            ->values()
+            ->toArray();
     }
 
     /**
@@ -64,7 +90,29 @@ class UserController extends Controller
      */
     public function index()
     {
-        return User::all();
+        $schoolId = currentSchoolId();
+        if ($schoolId === null) {
+            return response()->json(['message' => 'Requête invalide'], 400);
+        }
+
+        $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
+            ->where('school_id', $schoolId)->pluck('id');
+        $classroomIds = \App\Models\Classroom::query()->withoutGlobalScopes()
+            ->where('school_id', $schoolId)->pluck('id');
+
+        return User::whereHas('roles', function ($q) use ($schoolId, $familyIds, $classroomIds) {
+            $q->where(function ($q2) use ($schoolId, $familyIds, $classroomIds) {
+                $q2->where(function ($q3) use ($schoolId) {
+                    $q3->where('roleable_type', 'school')->where('roleable_id', $schoolId);
+                })
+                ->orWhere(function ($q3) use ($familyIds) {
+                    $q3->where('roleable_type', 'family')->whereIn('roleable_id', $familyIds);
+                })
+                ->orWhere(function ($q3) use ($classroomIds) {
+                    $q3->where('roleable_type', 'classroom')->whereIn('roleable_id', $classroomIds);
+                });
+            });
+        })->get();
     }
 
     /**
@@ -256,6 +304,10 @@ class UserController extends Controller
 
     public function getSchoolUsers(School $school)
     {
+        if ($school->id !== currentSchoolId()) {
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
         $users = $school->userRoles()
             ->with(['user', 'role'])
             ->get();
@@ -275,9 +327,17 @@ class UserController extends Controller
             'query' => 'required|string|min:2|max:50'
         ]);
 
+        $schoolId = currentSchoolId();
+        if ($schoolId === null) {
+            return response()->json(['message' => 'Requête invalide'], 400);
+        }
+
         $query = $request->input('query');
 
         try {
+            $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
+                ->where('school_id', $schoolId)->pluck('id');
+
             $students = User::select([
                 'users.id',
                 'users.first_name',
@@ -293,6 +353,7 @@ class UserController extends Controller
                 })
                 ->where('roles.slug', 'student')
                 ->where('user_roles.roleable_type', 'family')
+                ->whereIn('user_roles.roleable_id', $familyIds)
                 ->where(function($q) use ($query) {
                     $q->where('users.first_name', 'LIKE', "%{$query}%")
                         ->orWhere('users.last_name', 'LIKE', "%{$query}%")

@@ -35,7 +35,7 @@ class TarificationController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId) {
             return response()->json([
@@ -83,7 +83,7 @@ class TarificationController extends Controller
     public function updateTarif(Request $request, Cursus $cursus)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $cursus->school_id != $schoolId) {
             return response()->json([
@@ -115,7 +115,7 @@ class TarificationController extends Controller
     public function storeReductionFamiliale(Request $request, Cursus $cursus)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $cursus->school_id != $schoolId) {
             return response()->json([
@@ -146,7 +146,7 @@ class TarificationController extends Controller
     public function updateReductionFamiliale(Request $request, ReductionFamiliale $reduction)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $reduction->cursus->school_id != $schoolId) {
             return response()->json([
@@ -171,7 +171,7 @@ class TarificationController extends Controller
     public function deleteReductionFamiliale(Request $request, ReductionFamiliale $reduction)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $reduction->cursus->school_id != $schoolId) {
             return response()->json([
@@ -191,7 +191,7 @@ class TarificationController extends Controller
     public function storeReductionMultiCursus(Request $request, Cursus $cursus)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $cursus->school_id != $schoolId) {
             return response()->json([
@@ -233,7 +233,7 @@ class TarificationController extends Controller
     public function updateReductionMultiCursus(Request $request, ReductionMultiCursus $reduction)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $reduction->cursusBeneficiaire->school_id != $schoolId) {
             return response()->json([
@@ -257,7 +257,7 @@ class TarificationController extends Controller
     public function deleteReductionMultiCursus(Request $request, ReductionMultiCursus $reduction)
     {
         $user = $request->user();
-        $schoolId = $this->getUserSchoolId($user);
+        $schoolId = currentSchoolId();
 
         if (!$schoolId || $reduction->cursusBeneficiaire->school_id != $schoolId) {
             return response()->json([

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToSchool;
 use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Classroom extends Model
 {
-    use HasFactory, TrackChangesTrait;
+    use HasFactory, TrackChangesTrait, BelongsToSchool;
 
     protected $fillable = [
         'school_id',

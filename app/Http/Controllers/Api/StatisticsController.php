@@ -21,7 +21,7 @@ class StatisticsController extends Controller
     public function overview(Request $request)
     {
         $user = $request->user();
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
         
         $school = School::find($schoolId);
         if (!$school) {
@@ -364,7 +364,7 @@ class StatisticsController extends Controller
 
     public function unpaidFamilies(Request $request)
     {
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
         $search = $request->input('search', '');
@@ -473,7 +473,7 @@ class StatisticsController extends Controller
 
         $searchType = $request->input('search_type');
         $searchValue = $request->input('search_value');
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
 
         $query = LignePaiement::where('type_paiement', 'cheque')
             ->whereHas('paiement.family', function ($q) use ($schoolId) {
@@ -527,7 +527,7 @@ class StatisticsController extends Controller
 
     public function enrollmentTrends(Request $request)
     {
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
         $startDate = Carbon::now()->subMonths(6);
         
         $enrollments = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
@@ -547,7 +547,7 @@ class StatisticsController extends Controller
 
     public function revenueByMonth(Request $request)
     {
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
         $startDate = Carbon::now()->subMonths(6);
         
         $revenue = LignePaiement::whereHas('paiement.family', function ($query) use ($schoolId) {
@@ -583,7 +583,7 @@ class StatisticsController extends Controller
 
     public function payments(Request $request)
     {
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 20);
         $search = $request->input('search', '');
@@ -755,7 +755,7 @@ class StatisticsController extends Controller
 
     public function availableBanks(Request $request)
     {
-        $schoolId = $request->input('school_id', session('current_school_id'));
+        $schoolId = currentSchoolId();
 
         // Récupérer toutes les banques uniques pour les paiements par chèque
         $banks = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {

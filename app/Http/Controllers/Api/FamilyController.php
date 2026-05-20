@@ -187,17 +187,10 @@ class FamilyController extends Controller
         DB::beginTransaction();
 
         try {
-            $authenticatedUser = Auth::user();
-
-            $userSchoolRole = UserRole::where('user_id', $authenticatedUser->id)
-                ->where('roleable_type', 'school')
-                ->first();
-
-            if (!$userSchoolRole) {
-                throw new \Exception('L\'utilisateur n\'est associé à aucune école');
+            $schoolId = currentSchoolId();
+            if ($schoolId === null) {
+                throw new \Exception('Requête invalide');
             }
-
-            $schoolId = $userSchoolRole->roleable_id;
 
             $user = User::create([
                 'first_name' => $request->firstname,

@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class SuperAdmin
 {
@@ -13,11 +14,15 @@ class SuperAdmin
         $user = Auth::user();
 
         if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+            return response()->json(['message' => 'Non authentifié'], 401);
         }
 
         if (!$user->is_super_admin) {
-            return response()->json(['message' => 'Permissions insuffisantes'], 403);
+            Log::warning('SuperAdmin: access denied', [
+                'user_id' => $user->id,
+                'path' => $request->path(),
+            ]);
+            return response()->json(['message' => 'Accès refusé'], 403);
         }
 
         return $next($request);

@@ -18,7 +18,7 @@ class StoreClassroomRequest extends FormRequest
             'years' => 'required|integer',
             'type' => 'nullable|string|max:255',
             'size' => 'required|integer|min:1',
-            'school_id' => 'required|exists:schools,id',
+            'school_id' => 'sometimes|integer',
             'cursus_id' => 'required|exists:cursus,id',
             'level_id' => 'nullable|exists:cursus_levels,id',
             'gender' => 'required|in:Hommes,Femmes,Enfants,Mixte',

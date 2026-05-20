@@ -17,10 +17,6 @@ class ClassroomController extends Controller
     {
         $query = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules']);
 
-        if ($request->has('school_id')) {
-            $query->where('school_id', $request->school_id);
-        }
-
         if ($request->has('cursus_id')) {
             $query->where('cursus_id', $request->cursus_id);
         }
@@ -121,7 +117,6 @@ class ClassroomController extends Controller
                 'size' => $request->size,
                 'gender' => $request->gender,
                 'type' => $request->type ?? 'Standard',
-                'school_id' => $request->school_id,
                 'years' => $request->years ?? date('Y'),
                 'telegram_link' => $request->telegram_link
             ]);
@@ -324,9 +319,6 @@ class ClassroomController extends Controller
 
     public function getAdminClassrooms(Request $request)
     {
-        $user = $request->user();
-        $schoolId = $request->get('school_id', 1);
-
         $classrooms = Classroom::with([
             'cursus',
             'level',
@@ -335,7 +327,6 @@ class ClassroomController extends Controller
                 $query->select('users.id', 'users.first_name', 'users.last_name', 'users.email');
             }
         ])
-            ->where('school_id', $schoolId)
             ->orderBy('cursus_id')
             ->orderBy('level_id')
             ->orderBy('name')

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\SchoolContext;
 use App\Http\Middleware\SuperAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -21,64 +22,69 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'checkrole' => CheckRole::class,
             'superadmin' => SuperAdmin::class,
+            'school' => SchoolContext::class,
+        ]);
+
+        // SchoolContext doit passer avant SubstituteBindings sinon le Route
+        // Model Binding s'exécute sans contexte et le global scope renvoie 0 ligne.
+        $middleware->priority([
+            \Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests::class,
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
+            \Illuminate\Auth\Middleware\Authenticate::class,
+            \Illuminate\Session\Middleware\AuthenticateSession::class,
+            SuperAdmin::class,
+            SchoolContext::class,
+            CheckRole::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \Illuminate\Auth\Middleware\Authorize::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if ($request->is('api/*')) {
-                $model = $e->getPrevious()?->getModel();
-                if ($model) {
-                    $modelName = match ($model) {
-                        'App\Models\Classroom' => 'Classroom',
-                        'App\Models\Comment' => 'Comment',
-                        'App\Models\Family' => 'Family',
-                        'App\Models\Role' => 'Role',
-                        'App\Models\School' => 'School',
-                        'App\Models\User' => 'User',
-                        'App\Models\UserInfo' => 'User info',
-                        'App\Models\UerRole' => 'User role',
-                        default => 'Resource'
-                    };
-                }
-
                 return response()->json([
                     'status' => 'error',
-                    'message' => isset($modelName) ? "{$modelName} not found." : $e->getMessage(),
+                    'message' => 'Ressource introuvable',
                 ], 404);
             }
         });
 
         $exceptions->render(function (Throwable $e, Request $request) {
             if ($request->is('api/*') && env('APP_ENV') === 'production') {
-                
+
                 if ($e instanceof ValidationException) {
                     return response()->json([
                         'status' => 'error',
-                        'message' => $e->getMessage(),
-                        'errors' => $e->errors() // Optionnel : inclure les détails des erreurs
+                        'message' => 'Requête invalide',
+                        'errors' => $e->errors(),
                     ], 422);
                 }
-                
+
                 if ($e instanceof \Illuminate\Auth\AuthenticationException) {
                     return response()->json([
                         'status' => 'error',
-                        'message' => $e->getMessage()
+                        'message' => 'Non authentifié',
                     ], 401);
                 }
-                
+
                 if ($e instanceof \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException) {
                     return response()->json([
                         'status' => 'error',
-                        'message' => $e->getMessage()
+                        'message' => 'Accès refusé',
                     ], 403);
                 }
 
-                // Pour toutes les autres exceptions
                 $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
-                
+
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'The service encountered an issue. Please contact the administrator.'
+                    'message' => 'Une erreur est survenue',
                 ], $status);
             }
         });

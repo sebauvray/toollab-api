@@ -22,7 +22,33 @@ class SchoolController extends Controller
      */
     public function index()
     {
-        return School::all();
+        $user = auth()->user();
+
+        if ($user->is_super_admin) {
+            return School::orderBy('name')->get();
+        }
+
+        $direct = \App\Models\UserRole::where('user_id', $user->id)
+            ->where('roleable_type', 'school')
+            ->pluck('roleable_id');
+
+        $familyRoleIds = \App\Models\UserRole::where('user_id', $user->id)
+            ->where('roleable_type', 'family')
+            ->pluck('roleable_id');
+        $viaFamily = \App\Models\Family::query()->withoutGlobalScopes()
+            ->whereIn('id', $familyRoleIds)
+            ->pluck('school_id');
+
+        $classroomRoleIds = \App\Models\UserRole::where('user_id', $user->id)
+            ->where('roleable_type', 'classroom')
+            ->pluck('roleable_id');
+        $viaClassroom = \App\Models\Classroom::query()->withoutGlobalScopes()
+            ->whereIn('id', $classroomRoleIds)
+            ->pluck('school_id');
+
+        $schoolIds = $direct->concat($viaFamily)->concat($viaClassroom)->unique();
+
+        return School::whereIn('id', $schoolIds)->orderBy('name')->get();
     }
 
     /**
@@ -42,7 +68,7 @@ class SchoolController extends Controller
 
             $school = School::create([
                 'name' => $validatedData['name'],
-                'email' => $validatedData['email'],
+                'email' => $validatedData['email'] ?? null,
                 'phone' => $validatedData['phone'] ?? null,
                 'address' => $validatedData['address'],
                 'zipcode' => $validatedData['zipcode'] ?? null,
@@ -105,7 +131,40 @@ class SchoolController extends Controller
      */
     public function show(School $school)
     {
+        $user = auth()->user();
+        if (!$user->is_super_admin && !$this->userHasAccessTo($user->id, $school->id)) {
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
         return $school;
+    }
+
+    private function userHasAccessTo(int $userId, int $schoolId): bool
+    {
+        if (\App\Models\UserRole::where('user_id', $userId)
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $schoolId)
+            ->exists()) {
+            return true;
+        }
+
+        $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
+            ->where('school_id', $schoolId)->pluck('id');
+        if ($familyIds->isNotEmpty()
+            && \App\Models\UserRole::where('user_id', $userId)
+                ->where('roleable_type', 'family')
+                ->whereIn('roleable_id', $familyIds)
+                ->exists()) {
+            return true;
+        }
+
+        $classroomIds = \App\Models\Classroom::query()->withoutGlobalScopes()
+            ->where('school_id', $schoolId)->pluck('id');
+        return $classroomIds->isNotEmpty()
+            && \App\Models\UserRole::where('user_id', $userId)
+                ->where('roleable_type', 'classroom')
+                ->whereIn('roleable_id', $classroomIds)
+                ->exists();
     }
 
     /**
