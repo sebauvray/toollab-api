@@ -26,12 +26,19 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = ['is_super_admin'];
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function getIsSuperAdminAttribute(): bool
+    {
+        return in_array($this->email, config('toollab.super_admin_emails', []), true);
     }
 
     public function infos()

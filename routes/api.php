@@ -15,17 +15,19 @@ use App\Http\Controllers\Api\StatisticsController;
 use App\Http\Controllers\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 Route::post('forgot-password', [PasswordResetController::class, 'forgotPassword']);
 Route::post('reset-password', [PasswordResetController::class, 'resetPassword']);
 Route::post('check-reset-token', [PasswordResetController::class, 'checkResetToken']);
 Route::post('/check-invitation-token', [InvitationController::class, 'checkInvitationToken']);
 Route::post('/set-password', [InvitationController::class, 'setPassword']);
-Route::post('/schools', [SchoolController::class, 'store']);
 
 Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
+
+    Route::middleware('superadmin')->group(function () {
+        Route::post('/schools', [SchoolController::class, 'store']);
+    });
 
     Route::prefix('users')->group(function () {
         Route::get('/search', [UserController::class, 'searchStudents']);
