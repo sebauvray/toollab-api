@@ -201,9 +201,16 @@ class TarificationController extends Controller
         }
 
         $request->validate([
-            'cursus_requis_id' => 'required|exists:cursus,id',
+            'cursus_requis_id' => ['required', \Illuminate\Validation\Rule::exists('cursus', 'id')->where('school_id', $schoolId)],
             'pourcentage_reduction' => 'required|numeric|min:0|max:100'
         ]);
+
+        if ((int) $request->cursus_requis_id === $cursus->id) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Un cursus ne peut pas dépendre de lui-même.'
+            ], 422);
+        }
 
         $existingReduction = ReductionMultiCursus::where('cursus_beneficiaire_id', $request->cursus_requis_id)
             ->where('cursus_requis_id', $cursus->id)

@@ -33,6 +33,30 @@ class FamilyController extends Controller
         $this->paiementService = $paiementService;
     }
 
+    /**
+     * Vérifie que $user a un rôle $roleSlug dans le contexte $family.
+     * Retourne null si OK, sinon une JsonResponse 404 générique.
+     */
+    private function ensureMemberOfFamily(User $user, Family $family, string $roleSlug): ?\Illuminate\Http\JsonResponse
+    {
+        $belongs = UserRole::where('user_id', $user->id)
+            ->where('roleable_type', 'family')
+            ->where('roleable_id', $family->id)
+            ->whereHas('role', fn($q) => $q->where('slug', $roleSlug))
+            ->exists();
+
+        if (!$belongs) {
+            \Illuminate\Support\Facades\Log::warning('FamilyController: target user not in family', [
+                'caller_id' => auth()->id(),
+                'family_id' => $family->id,
+                'target_user_id' => $user->id,
+                'expected_role' => $roleSlug,
+            ]);
+            return response()->json(['status' => 'error', 'message' => 'Ressource introuvable'], 404);
+        }
+        return null;
+    }
+
     public function index(Request $request)
     {
         $query = Family::query();
@@ -554,6 +578,8 @@ class FamilyController extends Controller
 
     public function updateStudent(Request $request, Family $family, User $student)
     {
+        if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
+
         $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
@@ -590,6 +616,8 @@ class FamilyController extends Controller
 
     public function deleteStudent(Family $family, User $student)
     {
+        if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
+
         DB::beginTransaction();
 
         try {
@@ -768,6 +796,8 @@ class FamilyController extends Controller
 
     public function updateResponsible(Family $family, User $responsible, Request $request)
     {
+        if ($deny = $this->ensureMemberOfFamily($responsible, $family, 'responsible')) return $deny;
+
         $request->validate([
             'lastname' => 'required|string|max:255',
             'firstname' => 'required|string|max:255',

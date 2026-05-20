@@ -26,8 +26,12 @@ class StudentClassroomController extends Controller
 
         try {
             $classroom = Classroom::find($request->classroom_id);
-            $student = User::find($request->student_id);
             $family = Family::find($request->family_id);
+            $student = User::find($request->student_id);
+
+            if (!$classroom || !$family) {
+                return response()->json(['status' => 'error', 'message' => 'Ressource introuvable'], 404);
+            }
 
             $isStudentInFamily = UserRole::where('user_id', $student->id)
                 ->where('roleable_type', 'family')
@@ -133,6 +137,11 @@ class StudentClassroomController extends Controller
         DB::beginTransaction();
 
         try {
+            $classroom = Classroom::find($request->classroom_id);
+            if (!$classroom) {
+                return response()->json(['status' => 'error', 'message' => 'Ressource introuvable'], 404);
+            }
+
             $enrollment = StudentClassroom::where('student_id', $request->student_id)
                 ->where('classroom_id', $request->classroom_id)
                 ->first();

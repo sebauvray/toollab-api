@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreClassroomRequest extends FormRequest
 {
@@ -13,14 +14,17 @@ class StoreClassroomRequest extends FormRequest
 
     public function rules(): array
     {
+        $schoolId = currentSchoolId();
+
         return [
             'name' => 'required|string|max:255',
             'years' => 'required|integer',
             'type' => 'nullable|string|max:255',
             'size' => 'required|integer|min:1',
-            'school_id' => 'sometimes|integer',
-            'cursus_id' => 'required|exists:cursus,id',
-            'level_id' => 'nullable|exists:cursus_levels,id',
+            'cursus_id' => ['required', Rule::exists('cursus', 'id')->where('school_id', $schoolId)],
+            'level_id' => ['nullable', Rule::exists('cursus_levels', 'id')->where(function ($q) use ($schoolId) {
+                $q->whereIn('cursus_id', \App\Models\Cursus::query()->withoutGlobalScopes()->where('school_id', $schoolId)->pluck('id'));
+            })],
             'gender' => 'required|in:Hommes,Femmes,Enfants,Mixte',
             'telegram_link' => 'nullable|string|max:500',
             'schedules' => 'nullable|array',
