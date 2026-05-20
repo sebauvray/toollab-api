@@ -285,10 +285,13 @@ class TarificationController extends Controller
             'inscriptions.*.classes.*.cursus_id' => 'required|exists:cursus,id'
         ]);
 
-        $familyId = $request->family_id;
-        $inscriptionsData = $request->inscriptions;
+        $family = \App\Models\Family::findOrFail($request->family_id);
 
-        $result = $this->tarifCalculator->calculerTarifsFamille($familyId, $inscriptionsData);
+        if ($family->school_id !== currentSchoolId()) {
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
+        $result = $this->tarifCalculator->calculerTotalFamille($family, $request->inscriptions);
 
         return response()->json([
             'status' => 'success',

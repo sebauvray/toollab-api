@@ -12,12 +12,17 @@ use App\Models\LignePaiement;
 use App\Models\Cursus;
 use App\Models\Tarif;
 use App\Models\School;
+use App\Services\TarifCalculatorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class StatisticsController extends Controller
 {
+    public function __construct(private TarifCalculatorService $tarifCalculator)
+    {
+    }
+
     public function overview(Request $request)
     {
         $user = $request->user();
@@ -123,46 +128,18 @@ class StatisticsController extends Controller
 
     private function calculateExpectedRevenue($schoolId)
     {
-        $enrollments = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
+        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
             $query->where('school_id', $schoolId);
         })
-        ->where('status', 'active')
-        ->with('classroom')
-        ->get();
+            ->where('status', 'active')
+            ->distinct()
+            ->pluck('family_id');
 
         $totalExpected = 0;
-        $familyTotals = [];
-
-        foreach ($enrollments as $enrollment) {
-            $familyId = $enrollment->family_id;
-            $cursusId = $enrollment->classroom->cursus_id;
-            
-            if (!isset($familyTotals[$familyId])) {
-                $familyTotals[$familyId] = [];
-            }
-            
-            if (!isset($familyTotals[$familyId][$cursusId])) {
-                $familyTotals[$familyId][$cursusId] = 0;
-            }
-            
-            $familyTotals[$familyId][$cursusId]++;
-        }
-
-        foreach ($familyTotals as $familyId => $cursusCounts) {
-            foreach ($cursusCounts as $cursusId => $count) {
-                $tarif = Tarif::where('cursus_id', $cursusId)->where('actif', true)->first();
-                if ($tarif) {
-                    $basePrice = $tarif->prix;
-                    
-                    if ($count >= 5) {
-                        $totalExpected += 210 * $count;
-                    } elseif ($count >= 3) {
-                        $totalExpected += 240 * $count;
-                    } else {
-                        $totalExpected += $basePrice * $count;
-                    }
-                }
-            }
+        foreach ($familyIds as $familyId) {
+            $family = Family::query()->withoutGlobalScopes()->find($familyId);
+            if (!$family) continue;
+            $totalExpected += $this->calculateFamilyExpectedAmount($family);
         }
 
         return $totalExpected;
@@ -270,37 +247,7 @@ class StatisticsController extends Controller
 
     private function calculateFamilyExpectedAmount($family)
     {
-        $enrollments = StudentClassroom::where('family_id', $family->id)
-            ->where('status', 'active')
-            ->with('classroom')
-            ->get();
-
-        $cursusCounts = [];
-        foreach ($enrollments as $enrollment) {
-            if ($enrollment->classroom) {
-                $cursusId = $enrollment->classroom->cursus_id;
-                if (!isset($cursusCounts[$cursusId])) {
-                    $cursusCounts[$cursusId] = 0;
-                }
-                $cursusCounts[$cursusId]++;
-            }
-        }
-
-        $total = 0;
-        foreach ($cursusCounts as $cursusId => $count) {
-            $tarif = Tarif::where('cursus_id', $cursusId)->where('actif', true)->first();
-            if ($tarif) {
-                if ($count >= 5) {
-                    $total += 210 * $count;
-                } elseif ($count >= 3) {
-                    $total += 240 * $count;
-                } else {
-                    $total += $tarif->prix * $count;
-                }
-            }
-        }
-
-        return $total;
+        return (int) ($this->tarifCalculator->calculerTotalFamille($family)['total'] ?? 0);
     }
 
     private function getFamilyPaidAmount($familyId)
@@ -486,7 +433,10 @@ class StatisticsController extends Controller
                 $query->where('details->numero', 'like', '%' . $searchValue . '%');
                 break;
             case 'emitter_name':
-                $query->where('details->emetteur', 'like', '%' . $searchValue . '%');
+                $query->where(function ($q) use ($searchValue) {
+                    $q->where('details->nom_emetteur', 'like', '%' . $searchValue . '%')
+                      ->orWhere('details->emetteur', 'like', '%' . $searchValue . '%');
+                });
                 break;
             case 'bank':
                 $query->where('details->banque', 'like', '%' . $searchValue . '%');
@@ -500,7 +450,7 @@ class StatisticsController extends Controller
                 'amount' => $ligne->montant,
                 'cheque_details' => [
                     'numero' => $details['numero'] ?? '',
-                    'emetteur' => $details['emetteur'] ?? '',
+                    'emetteur' => $details['nom_emetteur'] ?? ($details['emetteur'] ?? ''),
                     'banque' => $details['banque'] ?? ''
                 ],
                 'payment_date' => $ligne->created_at->format('Y-m-d'),

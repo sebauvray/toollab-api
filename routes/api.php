@@ -31,11 +31,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
 
     // Auth uniquement (sans contexte école)
-    Route::get('/users/{user}/roles', [UserController::class, 'getUserRoles']);
-    Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
-    Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.delete');
     Route::post('/users/change-password', [UserPasswordController::class, 'changePassword']);
+    Route::get('/users/{user}/roles', [UserController::class, 'getUserRoles'])->whereNumber('user');
+    Route::get('/users/{user}', [UserController::class, 'show'])->whereNumber('user')->name('users.show');
+    Route::put('/users/{user}', [UserController::class, 'update'])->whereNumber('user')->name('users.update');
+    Route::delete('/users/{user}', [UserController::class, 'destroy'])->whereNumber('user')->name('users.delete');
 
     Route::get('/schools', [SchoolController::class, 'index']);
     Route::get('/schools/{school}', [SchoolController::class, 'show']);
@@ -54,7 +54,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/by-context', [UserController::class, 'getUsersByContextAndRole']);
             Route::get('/school/{school}', [UserController::class, 'getSchoolUsers']);
             Route::get('/classroom/{classroom}', [UserController::class, 'getClassroomUsers']);
-            Route::put('/{user}/info', [UserController::class, 'updateUserInfo']);
+            Route::put('/{user}/info', [UserController::class, 'updateUserInfo'])->whereNumber('user');
         });
 
         Route::post('/users/create-staff', [StaffController::class, 'createStaffUser']);
