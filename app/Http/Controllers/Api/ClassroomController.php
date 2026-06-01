@@ -15,7 +15,7 @@ class ClassroomController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules']);
+        $query = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules.teacher']);
 
         if ($request->has('cursus_id')) {
             $query->where('cursus_id', $request->cursus_id);
@@ -44,7 +44,13 @@ class ClassroomController extends Controller
                         'start_time' => $schedule->start_time,
                         'end_time' => $schedule->end_time,
                         'formatted_time' => $schedule->formatted_time,
-                        'teacher_name' => $schedule->teacher_name
+                        'teacher_name' => $schedule->teacher_name,
+                        'teacher_id' => $schedule->teacher_id,
+                        'teacher' => $schedule->teacher ? [
+                            'id' => $schedule->teacher->id,
+                            'first_name' => $schedule->teacher->first_name,
+                            'last_name' => $schedule->teacher->last_name,
+                        ] : null,
                     ];
                 })
             ];
@@ -67,7 +73,7 @@ class ClassroomController extends Controller
     public function show($id)
     {
         try {
-            $classroom = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules'])
+            $classroom = Classroom::with(['cursus', 'level', 'activeStudents', 'schedules.teacher'])
                 ->findOrFail($id);
 
             return response()->json([
@@ -90,7 +96,13 @@ class ClassroomController extends Controller
                             'start_time' => $schedule->start_time,
                             'end_time' => $schedule->end_time,
                             'formatted_time' => $schedule->formatted_time,
-                            'teacher_name' => $schedule->teacher_name
+                            'teacher_name' => $schedule->teacher_name,
+                            'teacher_id' => $schedule->teacher_id,
+                            'teacher' => $schedule->teacher ? [
+                                'id' => $schedule->teacher->id,
+                                'first_name' => $schedule->teacher->first_name,
+                                'last_name' => $schedule->teacher->last_name,
+                            ] : null,
                         ];
                     })
                 ]
@@ -127,7 +139,8 @@ class ClassroomController extends Controller
                         'day' => $scheduleData['day'],
                         'start_time' => $scheduleData['start_time'],
                         'end_time' => $scheduleData['end_time'],
-                        'teacher_name' => $scheduleData['teacher_name'] ?? null
+                        'teacher_name' => $scheduleData['teacher_name'] ?? null,
+                        'teacher_id' => $scheduleData['teacher_id'] ?? null,
                     ]);
                 }
             }
@@ -137,7 +150,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Classe créée avec succès',
-                'data' => $classroom->load(['cursus', 'level', 'schedules'])
+                'data' => $classroom->load(['cursus', 'level', 'schedules.teacher'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -193,7 +206,8 @@ class ClassroomController extends Controller
                                 'day' => $scheduleData['day'],
                                 'start_time' => $scheduleData['start_time'],
                                 'end_time' => $scheduleData['end_time'],
-                                'teacher_name' => $scheduleData['teacher_name'] ?? null
+                                'teacher_name' => $scheduleData['teacher_name'] ?? null,
+                                'teacher_id' => $scheduleData['teacher_id'] ?? null,
                             ]);
                             $updatedScheduleIds[] = $schedule->id;
                             $classroom->update([
@@ -205,7 +219,8 @@ class ClassroomController extends Controller
                             'day' => $scheduleData['day'],
                             'start_time' => $scheduleData['start_time'],
                             'end_time' => $scheduleData['end_time'],
-                            'teacher_name' => $scheduleData['teacher_name'] ?? null
+                            'teacher_name' => $scheduleData['teacher_name'] ?? null,
+                            'teacher_id' => $scheduleData['teacher_id'] ?? null,
                         ]);
                         $updatedScheduleIds[] = $newSchedule->id;
                     }
@@ -224,7 +239,7 @@ class ClassroomController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Classe mise à jour avec succès',
-                'data' => $classroom->fresh()->load(['cursus', 'level', 'schedules'])
+                'data' => $classroom->fresh()->load(['cursus', 'level', 'schedules.teacher'])
             ]);
 
         } catch (\Exception $e) {
@@ -352,7 +367,8 @@ class ClassroomController extends Controller
                             'first_name' => $student->first_name,
                             'last_name' => $student->last_name,
                             'email' => $student->email,
-                            'full_name' => $student->first_name . ' ' . $student->last_name
+                            'full_name' => $student->first_name . ' ' . $student->last_name,
+                            'family_id' => $student->pivot->family_id,
                         ];
                     })
                 ];

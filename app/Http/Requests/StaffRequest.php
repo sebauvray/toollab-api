@@ -29,7 +29,7 @@ class StaffRequest extends FormRequest
             'first_name' => 'required|string',
             'last_name' => 'required|string',
             'email' => 'required|email',
-            'role' => 'required|in:admin,registar',
+            'role' => 'required|in:admin,registar,teacher',
             'school_id' => 'required|exists:schools,id',
         ];
     }

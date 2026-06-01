@@ -33,6 +33,11 @@ class UpdateClassroomRequest extends FormRequest
             'schedules.*.start_time' => 'required_with:schedules.*|date_format:H:i',
             'schedules.*.end_time' => 'required_with:schedules.*|date_format:H:i|after:schedules.*.start_time',
             'schedules.*.teacher_name' => 'nullable|string|max:255',
+            'schedules.*.teacher_id' => ['nullable', 'integer', Rule::exists('user_roles', 'user_id')->where(function ($q) use ($schoolId) {
+                $q->where('roleable_type', 'school')
+                    ->where('roleable_id', $schoolId)
+                    ->whereIn('role_id', \App\Models\Role::query()->where('slug', 'teacher')->pluck('id'));
+            })],
             'schedules.*.delete' => 'nullable|boolean'
         ];
     }

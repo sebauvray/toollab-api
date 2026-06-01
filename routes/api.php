@@ -68,6 +68,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::middleware('schoolyear')->get('/search', [UserController::class, 'searchStudents']);
             Route::get('/', [UserController::class, 'getAllUsersWithRoles']);
             Route::get('/by-context', [UserController::class, 'getUsersByContextAndRole']);
+            Route::get('/teachers', [UserController::class, 'listTeachers']);
             Route::get('/school/{school}', [UserController::class, 'getSchoolUsers']);
             Route::get('/classroom/{classroom}', [UserController::class, 'getClassroomUsers']);
         });

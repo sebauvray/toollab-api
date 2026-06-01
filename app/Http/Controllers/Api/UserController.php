@@ -475,6 +475,35 @@ class UserController extends Controller
             });
     }
 
+    public function listTeachers()
+    {
+        $schoolId = currentSchoolId();
+        if ($schoolId === null) {
+            return response()->json(['message' => 'Requête invalide'], 400);
+        }
+
+        $caller = auth()->user();
+        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($schoolId, ['director', 'admin'])) {
+            return $this->denyAccess('user.list_teachers.no_role', ['school_id' => $schoolId]);
+        }
+
+        $teachers = User::query()
+            ->select(['users.id', 'users.first_name', 'users.last_name', 'users.email'])
+            ->join('user_roles', 'user_roles.user_id', '=', 'users.id')
+            ->join('roles', 'roles.id', '=', 'user_roles.role_id')
+            ->where('roles.slug', 'teacher')
+            ->where('user_roles.roleable_type', 'school')
+            ->where('user_roles.roleable_id', $schoolId)
+            ->orderBy('users.last_name')
+            ->orderBy('users.first_name')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $teachers,
+        ]);
+    }
+
     public function searchStudents(Request $request)
     {
         $request->validate([
