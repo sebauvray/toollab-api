@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\TarificationController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserPasswordController;
+use App\Http\Controllers\Api\SchoolYearController;
 use App\Http\Controllers\Api\StatisticsController;
 use App\Http\Controllers\PasswordResetController;
 use Illuminate\Support\Facades\Route;
@@ -34,8 +35,6 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('/users/change-password', [UserPasswordController::class, 'changePassword']);
     Route::get('/users/{user}/roles', [UserController::class, 'getUserRoles'])->whereNumber('user');
     Route::get('/users/{user}', [UserController::class, 'show'])->whereNumber('user')->name('users.show');
-    Route::put('/users/{user}', [UserController::class, 'update'])->whereNumber('user')->name('users.update');
-    Route::delete('/users/{user}', [UserController::class, 'destroy'])->whereNumber('user')->name('users.delete');
 
     Route::get('/schools', [SchoolController::class, 'index']);
     Route::get('/schools/{school}', [SchoolController::class, 'show']);
@@ -47,89 +46,116 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     // Avec contexte école (header X-School-Id requis)
     Route::middleware('school')->group(function () {
 
+        // Endpoints année scolaire : school-scoped mais PAS year-scoped
+        // (sinon impossible de lister les années archivées)
+        Route::prefix('school-years')->group(function () {
+            Route::get('/', [SchoolYearController::class, 'index']);
+            Route::middleware('checkrole:director,admin')->group(function () {
+                Route::post('/', [SchoolYearController::class, 'store']);
+                Route::post('/{schoolYear}/close', [SchoolYearController::class, 'close']);
+                Route::get('/{schoolYear}/classrooms', [SchoolYearController::class, 'classroomsForReconduction']);
+            });
+        });
+
+        Route::middleware('checkrole:director,admin')
+            ->post('/classrooms/{classroom}/reconduct', [SchoolYearController::class, 'reconductClassroom']);
+
+        // Lecture/gestion utilisateurs et staff — toujours autorisé même en consultation
+        // d'une année archivée (gestion de la plateforme, pas des données pédagogiques)
         Route::prefix('users')->group(function () {
-            Route::get('/search', [UserController::class, 'searchStudents']);
+            // search est year-scopé : on ne propose que les élèves inscrits dans l'année courante.
+            // Le middleware schoolyear ne bloque pas les GET, il ne fait que résoudre l'année.
+            Route::middleware('schoolyear')->get('/search', [UserController::class, 'searchStudents']);
             Route::get('/', [UserController::class, 'getAllUsersWithRoles']);
-            Route::post('/', [UserController::class, 'store'])->name('users.store');
             Route::get('/by-context', [UserController::class, 'getUsersByContextAndRole']);
             Route::get('/school/{school}', [UserController::class, 'getSchoolUsers']);
             Route::get('/classroom/{classroom}', [UserController::class, 'getClassroomUsers']);
-            Route::put('/{user}/info', [UserController::class, 'updateUserInfo'])->whereNumber('user');
         });
 
         Route::post('/users/create-staff', [StaffController::class, 'createStaffUser']);
         Route::post('/users/remove-role', [StaffController::class, 'removeUserRole']);
 
-        Route::prefix('families')->group(function () {
-            Route::get('/', [FamilyController::class, 'index']);
-            Route::post('/', [FamilyController::class, 'store']);
-            Route::get('/{family}', [FamilyController::class, 'show']);
-            Route::put('/{family}', [FamilyController::class, 'update']);
-            Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
-            Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
-            Route::put('/{family}/students/{student}', [FamilyController::class, 'updateStudent']);
-            Route::delete('/{family}/students/{student}', [FamilyController::class, 'deleteStudent']);
-            Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
-            Route::post('/{family}/responsible', [FamilyController::class, 'addResponsibleToFamily']);
-            Route::put('/{family}/responsible/{responsible}', [FamilyController::class, 'updateResponsible']);
-        });
-
-        Route::prefix('cursus')->middleware('checkrole:director,admin')->group(function () {
-            Route::get('/', [CursusController::class, 'index']);
-            Route::post('/', [CursusController::class, 'store']);
-            Route::get('/{cursus}', [CursusController::class, 'show']);
-            Route::put('/{cursus}', [CursusController::class, 'update']);
-            Route::delete('/{cursus}', [CursusController::class, 'destroy']);
-        });
-
-        Route::prefix('classrooms')->group(function () {
-            Route::get('/', [ClassroomController::class, 'index']);
-            Route::post('/', [ClassroomController::class, 'store']);
-            Route::get('/{classroom}', [ClassroomController::class, 'show']);
-            Route::put('/{classroom}', [ClassroomController::class, 'update']);
-            Route::delete('/{id}', [ClassroomController::class, 'destroy']);
-        });
-
-        Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
-            Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
-            Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
-        });
-
         Route::prefix('schools')->group(function () {
             Route::get('/{school}/families', [SchoolController::class, 'getAllFamiliesInSchool']);
         });
 
-        Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
-        Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
-        Route::get('/families/{family}/enrollments', [StudentClassroomController::class, 'getFamilyEnrollments']);
+        // Routes year-scoped : header X-School-Year-Id optionnel (défaut = année active).
+        // Le middleware schoolyear rejette toute mutation (POST/PUT/PATCH/DELETE)
+        // si l'année courante est archivée (closed_at != null ou is_active=false).
+        Route::middleware('schoolyear')->group(function () {
+            // Création/modification/suppression utilisateur (élèves notamment) — bloquée sur archive
+            Route::post('/users', [UserController::class, 'store'])->name('users.store');
+            Route::put('/users/{user}', [UserController::class, 'update'])->whereNumber('user')->name('users.update');
+            Route::delete('/users/{user}', [UserController::class, 'destroy'])->whereNumber('user')->name('users.delete');
+            Route::put('/users/{user}/info', [UserController::class, 'updateUserInfo'])->whereNumber('user');
 
-        Route::prefix('tarification')->middleware('checkrole:director,admin')->group(function () {
-            Route::get('/cursus', [TarificationController::class, 'index']);
-            Route::post('/cursus/{cursus}/tarif', [TarificationController::class, 'updateTarif']);
-            Route::post('/cursus/{cursus}/reduction-familiale', [TarificationController::class, 'storeReductionFamiliale']);
-            Route::put('/reduction-familiale/{reduction}', [TarificationController::class, 'updateReductionFamiliale']);
-            Route::delete('/reduction-familiale/{reduction}', [TarificationController::class, 'deleteReductionFamiliale']);
-            Route::post('/cursus/{cursus}/reduction-multi-cursus', [TarificationController::class, 'storeReductionMultiCursus']);
-            Route::put('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'updateReductionMultiCursus']);
-            Route::delete('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'deleteReductionMultiCursus']);
-            Route::post('/calculer', [TarificationController::class, 'calculerTarifs']);
-        });
+            Route::prefix('families')->group(function () {
+                Route::get('/', [FamilyController::class, 'index']);
+                Route::post('/', [FamilyController::class, 'store']);
+                Route::get('/{family}', [FamilyController::class, 'show']);
+                Route::put('/{family}', [FamilyController::class, 'update']);
+                Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
+                Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
+                Route::put('/{family}/students/{student}', [FamilyController::class, 'updateStudent']);
+                Route::delete('/{family}/students/{student}', [FamilyController::class, 'deleteStudent']);
+                Route::post('/{family}/responsibles', [FamilyController::class, 'addResponsible']);
+                Route::post('/{family}/responsible', [FamilyController::class, 'addResponsibleToFamily']);
+                Route::put('/{family}/responsible/{responsible}', [FamilyController::class, 'updateResponsible']);
+                Route::get('/{family}/enrollments', [StudentClassroomController::class, 'getFamilyEnrollments']);
+            });
 
-        Route::prefix('families/{family}/paiements')->group(function () {
-            Route::get('/', [App\Http\Controllers\Api\PaiementController::class, 'show']);
-            Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
-            Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
-            Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
-        });
+            Route::prefix('cursus')->middleware('checkrole:director,admin')->group(function () {
+                Route::get('/', [CursusController::class, 'index']);
+                Route::post('/', [CursusController::class, 'store']);
+                Route::get('/{cursus}', [CursusController::class, 'show']);
+                Route::put('/{cursus}', [CursusController::class, 'update']);
+                Route::delete('/{cursus}', [CursusController::class, 'destroy']);
+            });
 
-        Route::prefix('statistics')->middleware('checkrole:admin,director')->group(function () {
-            Route::get('/overview', [StatisticsController::class, 'overview']);
-            Route::get('/unpaid-families', [StatisticsController::class, 'unpaidFamilies']);
-            Route::post('/search-payments', [StatisticsController::class, 'searchPayments']);
-            Route::get('/enrollment-trends', [StatisticsController::class, 'enrollmentTrends']);
-            Route::get('/revenue-by-month', [StatisticsController::class, 'revenueByMonth']);
-            Route::get('/payments', [StatisticsController::class, 'payments']);
-            Route::get('/available-banks', [StatisticsController::class, 'availableBanks']);
+            Route::prefix('classrooms')->group(function () {
+                Route::get('/', [ClassroomController::class, 'index']);
+                Route::post('/', [ClassroomController::class, 'store']);
+                Route::get('/{classroom}', [ClassroomController::class, 'show']);
+                Route::put('/{classroom}', [ClassroomController::class, 'update']);
+                Route::delete('/{id}', [ClassroomController::class, 'destroy']);
+            });
+
+            Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
+                Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
+                Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
+            });
+
+            Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
+            Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
+
+            Route::prefix('tarification')->middleware('checkrole:director,admin')->group(function () {
+                Route::get('/cursus', [TarificationController::class, 'index']);
+                Route::post('/cursus/{cursus}/tarif', [TarificationController::class, 'updateTarif']);
+                Route::post('/cursus/{cursus}/reduction-familiale', [TarificationController::class, 'storeReductionFamiliale']);
+                Route::put('/reduction-familiale/{reduction}', [TarificationController::class, 'updateReductionFamiliale']);
+                Route::delete('/reduction-familiale/{reduction}', [TarificationController::class, 'deleteReductionFamiliale']);
+                Route::post('/cursus/{cursus}/reduction-multi-cursus', [TarificationController::class, 'storeReductionMultiCursus']);
+                Route::put('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'updateReductionMultiCursus']);
+                Route::delete('/reduction-multi-cursus/{reduction}', [TarificationController::class, 'deleteReductionMultiCursus']);
+                Route::post('/calculer', [TarificationController::class, 'calculerTarifs']);
+            });
+
+            Route::prefix('families/{family}/paiements')->group(function () {
+                Route::get('/', [App\Http\Controllers\Api\PaiementController::class, 'show']);
+                Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
+                Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
+                Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
+            });
+
+            Route::prefix('statistics')->middleware('checkrole:admin,director')->group(function () {
+                Route::get('/overview', [StatisticsController::class, 'overview']);
+                Route::get('/unpaid-families', [StatisticsController::class, 'unpaidFamilies']);
+                Route::post('/search-payments', [StatisticsController::class, 'searchPayments']);
+                Route::get('/enrollment-trends', [StatisticsController::class, 'enrollmentTrends']);
+                Route::get('/revenue-by-month', [StatisticsController::class, 'revenueByMonth']);
+                Route::get('/payments', [StatisticsController::class, 'payments']);
+                Route::get('/available-banks', [StatisticsController::class, 'availableBanks']);
+            });
         });
     });
 });

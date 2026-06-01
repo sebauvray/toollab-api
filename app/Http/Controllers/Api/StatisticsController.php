@@ -47,18 +47,20 @@ class StatisticsController extends Controller
 
     private function getEnrollmentStats($schoolId)
     {
-        // Get all students from families in this school
-        $students = User::whereHas('roles', function ($query) use ($schoolId) {
-            $query->where('roleable_type', 'family')
-                ->whereHas('role', function ($q) {
-                    $q->where('slug', 'student');
-                })
-                ->whereIn('roleable_id', Family::where('school_id', $schoolId)->pluck('id'));
+        // Élèves inscrits dans une classe de l'année scolaire courante uniquement.
+        // whereHas('classroom') applique le global scope BelongsToSchoolYear de Classroom.
+        $studentIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
+            $query->where('school_id', $schoolId);
         })
-        ->with(['infos' => function ($query) {
-            $query->whereIn('key', ['gender', 'birthdate']);
-        }])
-        ->get();
+            ->where('status', 'active')
+            ->distinct()
+            ->pluck('student_id');
+
+        $students = User::whereIn('id', $studentIds)
+            ->with(['infos' => function ($query) {
+                $query->whereIn('key', ['gender', 'birthdate']);
+            }])
+            ->get();
 
         $stats = [
             'total' => $students->count(),
@@ -189,7 +191,16 @@ class StatisticsController extends Controller
 
     private function getFamilyStats($schoolId)
     {
-        $families = Family::where('school_id', $schoolId)->get();
+        // Familles ayant au moins une inscription active dans une classe de l'année courante.
+        // whereHas('classroom') applique le global scope BelongsToSchoolYear de Classroom.
+        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
+            $query->where('school_id', $schoolId);
+        })
+            ->where('status', 'active')
+            ->distinct()
+            ->pluck('family_id');
+
+        $families = Family::whereIn('id', $familyIds)->get();
 
         $unpaidFamilies = [];
         $partiallyPaidFamilies = [];
@@ -316,8 +327,16 @@ class StatisticsController extends Controller
         $perPage = $request->input('per_page', 10);
         $search = $request->input('search', '');
         $filter = $request->input('filter', ''); // 'unpaid' ou 'partial'
-        
-        $families = Family::where('school_id', $schoolId)->get();
+
+        // Familles avec au moins une inscription active dans l'année courante.
+        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
+            $query->where('school_id', $schoolId);
+        })
+            ->where('status', 'active')
+            ->distinct()
+            ->pluck('family_id');
+
+        $families = Family::whereIn('id', $familyIds)->get();
 
         $unpaidData = [];
 

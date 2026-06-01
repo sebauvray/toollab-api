@@ -34,6 +34,46 @@ class FamilyController extends Controller
     }
 
     /**
+     * Le caller (auth user) a-t-il le droit d'accéder à $family ?
+     * - super-admin : oui
+     * - director / admin de l'école : oui
+     * - rattaché à la famille (responsible ou student) : oui
+     * - sinon : non (renvoyer 403)
+     */
+    public static function callerCanAccessFamily(Family $family): bool
+    {
+        $caller = auth()->user();
+        if (!$caller) return false;
+        if ($caller->is_super_admin) return true;
+
+        $schoolId = currentSchoolId();
+        if ($schoolId !== null && $family->school_id !== $schoolId) {
+            return false;
+        }
+
+        $isAdmin = UserRole::where('user_id', $caller->id)
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $family->school_id)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin']))
+            ->exists();
+        if ($isAdmin) return true;
+
+        return UserRole::where('user_id', $caller->id)
+            ->where('roleable_type', 'family')
+            ->where('roleable_id', $family->id)
+            ->exists();
+    }
+
+    private function denyFamilyAccess(Family $family): \Illuminate\Http\JsonResponse
+    {
+        \Illuminate\Support\Facades\Log::warning('FamilyController: cross-family access denied', [
+            'caller_id' => auth()->id(),
+            'family_id' => $family->id,
+        ]);
+        return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+    }
+
+    /**
      * Vérifie que $user a un rôle $roleSlug dans le contexte $family.
      * Retourne null si OK, sinon une JsonResponse 404 générique.
      */
@@ -60,6 +100,23 @@ class FamilyController extends Controller
     public function index(Request $request)
     {
         $query = Family::query();
+
+        // Pour les non-admins, ne montrer que les familles auxquelles le user
+        // est rattaché (responsible ou student). Director/admin/super-admin voient tout.
+        $caller = auth()->user();
+        $schoolId = currentSchoolId();
+        $isAdmin = $caller && ($caller->is_super_admin || UserRole::where('user_id', $caller->id)
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $schoolId)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin']))
+            ->exists());
+
+        if (!$isAdmin) {
+            $myFamilyIds = UserRole::where('user_id', $caller->id)
+                ->where('roleable_type', 'family')
+                ->pluck('roleable_id');
+            $query->whereIn('id', $myFamilyIds);
+        }
 
         $query->with(['userRoles' => function ($q) {
             $q->whereHas('role', function ($query) {
@@ -286,6 +343,8 @@ class FamilyController extends Controller
 
     public function update(Request $request, Family $family, User $user)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
+
         $request->validate([
             'lastname' => 'required|string|max:255',
             'firstname' => 'required|string|max:255',
@@ -368,6 +427,8 @@ class FamilyController extends Controller
 
     public function show(Family $family)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
+
         $responsibles = $family->userRoles()
             ->with(['user', 'user.infos', 'role'])
             ->whereHas('role', function ($query) {
@@ -457,6 +518,8 @@ class FamilyController extends Controller
 
     public function addComment(Request $request, Family $family)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
+
         $request->validate([
             'content' => 'required|string',
             'author_name' => 'nullable|string'
@@ -494,6 +557,8 @@ class FamilyController extends Controller
 
     public function addStudents(Request $request, Family $family)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
+
         $request->validate([
             'students' => 'required|array',
             'students.*.lastname' => 'required|string|max:255',
@@ -578,6 +643,7 @@ class FamilyController extends Controller
 
     public function updateStudent(Request $request, Family $family, User $student)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
 
         $request->validate([
@@ -616,6 +682,7 @@ class FamilyController extends Controller
 
     public function deleteStudent(Family $family, User $student)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
 
         DB::beginTransaction();
@@ -640,6 +707,8 @@ class FamilyController extends Controller
 
     public function addResponsible(Request $request, Family $family)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
+
         $request->validate([
             'user_id' => 'required|exists:users,id'
         ]);
@@ -715,6 +784,8 @@ class FamilyController extends Controller
 
     public function addResponsibleToFamily(Family $family, Request $request)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
+
         $request->validate([
             'lastname' => 'required|string|max:255',
             'firstname' => 'required|string|max:255',
@@ -822,6 +893,7 @@ class FamilyController extends Controller
 
     public function updateResponsible(Family $family, User $responsible, Request $request)
     {
+        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($responsible, $family, 'responsible')) return $deny;
 
         $request->validate([

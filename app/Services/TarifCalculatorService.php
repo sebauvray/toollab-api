@@ -12,6 +12,10 @@ class TarifCalculatorService
 {
     public function calculerTotalFamille(Family $family, array $inscriptionsData = null): array
     {
+        $snapshotIndex = $inscriptionsData === null
+            ? $this->loadSnapshotsForFamily($family)
+            : [];
+
         if ($inscriptionsData === null) {
             $inscriptionsData = $this->getInscriptionsActives($family);
         }
@@ -32,31 +36,46 @@ class TarifCalculatorService
             ];
 
             foreach ($cursusIds as $cursusId) {
-                $cursus = Cursus::with(['tarif', 'reductionsFamiliales', 'reductionsMultiCursusBeneficiaire'])->find($cursusId);
+                $snapshot = $snapshotIndex[$inscription['student_id']][$cursusId] ?? null;
 
-                if (!$cursus || !$cursus->tarif) {
-                    continue;
+                if ($snapshot && isset($snapshot['tarif_base'])) {
+                    $tarifBase = (int) $snapshot['tarif_base'];
+                    $cursusName = Cursus::query()->withoutGlobalScopes()->where('id', $cursusId)->value('name') ?? '';
+
+                    $nombreElevesCursus = $this->countStudentsInCursus($inscriptionsParCursus, $cursusId);
+                    $reductionFamiliale = $this->getReductionFamilialeFromSnapshot($snapshot, $nombreElevesCursus);
+
+                    $autresCursusEleve = $this->getAutresCursusEleve($inscriptionsData, $student->id, $cursusId);
+                    $reductionMultiCursus = $this->getReductionMultiCursusFromSnapshot($snapshot, $autresCursusEleve);
+                } else {
+                    $cursus = Cursus::with(['tarif', 'reductionsFamiliales', 'reductionsMultiCursusBeneficiaire'])->find($cursusId);
+
+                    if (!$cursus || !$cursus->tarif) {
+                        continue;
+                    }
+
+                    $tarifBase = intval($cursus->tarif->prix);
+                    $cursusName = $cursus->name;
+
+                    $nombreElevesCursus = $this->countStudentsInCursus($inscriptionsParCursus, $cursusId);
+                    $reductionFamiliale = $this->getReductionFamiliale($cursus, $nombreElevesCursus);
+
+                    $autresCursusEleve = $this->getAutresCursusEleve($inscriptionsData, $student->id, $cursusId);
+                    $reductionMultiCursus = $this->getReductionMultiCursus($cursus, $autresCursusEleve);
                 }
-
-                $tarifBase = intval($cursus->tarif->prix);
-
-                $nombreElevesCursus = $this->countStudentsInCursus($inscriptionsParCursus, $cursusId);
-                $reductionFamiliale = $this->getReductionFamiliale($cursus, $nombreElevesCursus);
-
-                $autresCursusEleve = $this->getAutresCursusEleve($inscriptionsData, $student->id, $cursusId);
-                $reductionMultiCursus = $this->getReductionMultiCursus($cursus, $autresCursusEleve);
 
                 $reduction = max($reductionFamiliale, $reductionMultiCursus);
                 $tarifFinal = $tarifBase * (1 - $reduction / 100);
 
                 $detailEleve['cursus'][] = [
                     'cursus_id' => $cursusId,
-                    'cursus_name' => $cursus->name,
+                    'cursus_name' => $cursusName,
                     'tarif_base' => $tarifBase,
                     'reduction_familiale' => $reductionFamiliale,
                     'reduction_multi_cursus' => $reductionMultiCursus,
                     'reduction_appliquee' => $reduction,
-                    'tarif_final' => round($tarifFinal, 0, PHP_ROUND_HALF_UP)
+                    'tarif_final' => round($tarifFinal, 0, PHP_ROUND_HALF_UP),
+                    'from_snapshot' => $snapshot !== null,
                 ];
 
                 $totalFamille += round($tarifFinal, 0, PHP_ROUND_HALF_UP);
@@ -175,5 +194,69 @@ class TarifCalculatorService
             ->first();
 
         return $reduction ? floatval($reduction->pourcentage_reduction) : 0;
+    }
+
+    /**
+     * Charge tous les snapshots tarif des inscriptions actives de la famille,
+     * indexés par [student_id][cursus_id]. Si une inscription n'a pas de snapshot
+     * (créée avant P5), on retombe sur le calcul live.
+     */
+    private function loadSnapshotsForFamily(Family $family): array
+    {
+        $inscriptions = StudentClassroom::where('family_id', $family->id)
+            ->where('status', 'active')
+            ->whereNotNull('tarif_snapshot')
+            ->with('classroom:id,cursus_id')
+            ->get();
+
+        $index = [];
+        foreach ($inscriptions as $inscription) {
+            $snapshot = $inscription->tarif_snapshot;
+            $cursusId = $snapshot['cursus_id'] ?? optional($inscription->classroom)->cursus_id;
+            if (!$cursusId) {
+                continue;
+            }
+            $index[$inscription->student_id][$cursusId] = $snapshot;
+        }
+
+        return $index;
+    }
+
+    private function getReductionFamilialeFromSnapshot(array $snapshot, int $nombreEleves): float
+    {
+        if ($nombreEleves <= 1 || empty($snapshot['reductions_familiales'])) {
+            return 0;
+        }
+
+        $best = 0;
+        $bestMin = -1;
+        foreach ($snapshot['reductions_familiales'] as $r) {
+            $min = (int) ($r['nombre_eleves_min'] ?? 0);
+            if ($min <= $nombreEleves && $min > $bestMin) {
+                $best = (float) ($r['pourcentage_reduction'] ?? 0);
+                $bestMin = $min;
+            }
+        }
+
+        return $best;
+    }
+
+    private function getReductionMultiCursusFromSnapshot(array $snapshot, array $autresCursusIds): float
+    {
+        if (empty($autresCursusIds) || empty($snapshot['reductions_multi_cursus'])) {
+            return 0;
+        }
+
+        $best = 0;
+        foreach ($snapshot['reductions_multi_cursus'] as $r) {
+            if (in_array((int) ($r['cursus_requis_id'] ?? 0), $autresCursusIds, true)) {
+                $pct = (float) ($r['pourcentage_reduction'] ?? 0);
+                if ($pct > $best) {
+                    $best = $pct;
+                }
+            }
+        }
+
+        return $best;
     }
 }

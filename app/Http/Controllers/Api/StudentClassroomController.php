@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\FamilyController;
 use App\Models\StudentClassroom;
 use App\Models\Classroom;
 use App\Models\Family;
@@ -31,6 +32,10 @@ class StudentClassroomController extends Controller
 
             if (!$classroom || !$family) {
                 return response()->json(['status' => 'error', 'message' => 'Ressource introuvable'], 404);
+            }
+
+            if (!FamilyController::callerCanAccessFamily($family)) {
+                return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
             }
 
             $isStudentInFamily = UserRole::where('user_id', $student->id)
@@ -83,12 +88,15 @@ class StudentClassroomController extends Controller
                     ->delete();
             }
 
+            $snapshot = $this->buildTarifSnapshot($classroom);
+
             $enrollment = StudentClassroom::create([
                 'student_id' => $request->student_id,
                 'classroom_id' => $request->classroom_id,
                 'family_id' => $request->family_id,
                 'status' => 'active',
-                'enrollment_date' => now()
+                'enrollment_date' => now(),
+                'tarif_snapshot' => $snapshot,
             ]);
 
             $studentRole = Role::where('slug', 'student')->first();
@@ -153,6 +161,11 @@ class StudentClassroomController extends Controller
                 ], 404);
             }
 
+            $family = Family::find($enrollment->family_id);
+            if (!$family || !FamilyController::callerCanAccessFamily($family)) {
+                return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+            }
+
             $enrollment->delete();
 
             UserRole::where('user_id', $request->student_id)
@@ -177,10 +190,47 @@ class StudentClassroomController extends Controller
         }
     }
 
+    /**
+     * Snapshot du tarif et des réductions du cursus au moment de l'inscription.
+     * Permet de figer le prix promis à la famille — modifier le Tarif après
+     * coup n'affecte pas les inscriptions déjà snapshotées.
+     */
+    private function buildTarifSnapshot(Classroom $classroom): array
+    {
+        $cursus = $classroom->cursus()->with([
+            'tarif',
+            'reductionsFamiliales',
+            'reductionsMultiCursusBeneficiaire',
+        ])->first();
+
+        if (!$cursus) {
+            return [];
+        }
+
+        return [
+            'cursus_id' => $cursus->id,
+            'school_year_id' => $classroom->school_year_id,
+            'tarif_base' => $cursus->tarif ? (int) $cursus->tarif->prix : null,
+            'reductions_familiales' => $cursus->reductionsFamiliales->map(fn ($r) => [
+                'nombre_eleves_min' => (int) $r->nombre_eleves_min,
+                'pourcentage_reduction' => (float) $r->pourcentage_reduction,
+            ])->values()->all(),
+            'reductions_multi_cursus' => $cursus->reductionsMultiCursusBeneficiaire->map(fn ($r) => [
+                'cursus_requis_id' => (int) $r->cursus_requis_id,
+                'pourcentage_reduction' => (float) $r->pourcentage_reduction,
+            ])->values()->all(),
+            'snapshotted_at' => now()->toIso8601String(),
+        ];
+    }
+
     public function getFamilyEnrollments($familyId)
     {
         try {
             $family = Family::findOrFail($familyId);
+
+            if (!FamilyController::callerCanAccessFamily($family)) {
+                return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+            }
 
             $students = UserRole::where('roleable_type', 'family')
                 ->where('roleable_id', $familyId)

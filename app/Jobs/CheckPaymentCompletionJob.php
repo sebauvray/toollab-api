@@ -27,16 +27,38 @@ class CheckPaymentCompletionJob implements ShouldQueue
 
     public function handle(PaiementService $paiementService)
     {
-        $details = $paiementService->getDetailsPaiement($this->family);
+        // Hors HTTP, les scopes globaux BelongsToSchool / BelongsToSchoolYear
+        // n'ont pas de contexte → ils fail-closed et retournent 0 row.
+        // On rétablit le contexte depuis les attributs de la famille.
+        $previous = [
+            request()->attributes->get('current_school_id'),
+            request()->attributes->get('current_school_year_id'),
+        ];
+        request()->attributes->set('current_school_id', $this->family->school_id);
+        $activeYear = \App\Models\SchoolYear::query()
+            ->withoutGlobalScopes()
+            ->where('school_id', $this->family->school_id)
+            ->where('is_active', true)
+            ->first();
+        if ($activeYear) {
+            request()->attributes->set('current_school_year_id', $activeYear->id);
+        }
 
-        if ($details['reste_a_payer'] == 0 && $details['montant_total'] > 0) {
-            if ($this->previousResteAPayer === null || $this->previousResteAPayer > 0) {
-                $responsables = $this->family->responsibles()->get();
+        try {
+            $details = $paiementService->getDetailsPaiement($this->family);
 
-                foreach ($responsables as $responsable) {
-                    $responsable->notify(new PaymentCompletedNotification($this->family, $details));
+            if ($details['reste_a_payer'] == 0 && $details['montant_total'] > 0) {
+                if ($this->previousResteAPayer === null || $this->previousResteAPayer > 0) {
+                    $responsables = $this->family->responsibles()->get();
+
+                    foreach ($responsables as $responsable) {
+                        $responsable->notify(new PaymentCompletedNotification($this->family, $details));
+                    }
                 }
             }
+        } finally {
+            request()->attributes->set('current_school_id', $previous[0]);
+            request()->attributes->set('current_school_year_id', $previous[1]);
         }
     }
 }

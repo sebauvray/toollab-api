@@ -13,3 +13,17 @@ if (!function_exists('currentSchoolId')) {
         return is_int($value) ? $value : null;
     }
 }
+
+if (!function_exists('currentSchoolYearId')) {
+    function currentSchoolYearId(): ?int
+    {
+        $request = request();
+        if (!$request) {
+            return null;
+        }
+
+        $value = $request->attributes->get('current_school_year_id');
+
+        return is_int($value) ? $value : null;
+    }
+}

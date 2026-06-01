@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Classroom;
+use App\Models\StudentClassroom;
 use App\Models\User;
 use App\Models\UserRole;
 use App\Models\School;
@@ -491,6 +492,12 @@ class UserController extends Controller
             $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
                 ->where('school_id', $schoolId)->pluck('id');
 
+            // Restreint aux élèves ayant une inscription active dans l'année courante.
+            // Le global scope BelongsToSchoolYear sur StudentClassroom filtre par année.
+            $activeStudentIds = StudentClassroom::where('status', 'active')
+                ->distinct()
+                ->pluck('student_id');
+
             $students = User::select([
                 'users.id',
                 'users.first_name',
@@ -507,6 +514,7 @@ class UserController extends Controller
                 ->where('roles.slug', 'student')
                 ->where('user_roles.roleable_type', 'family')
                 ->whereIn('user_roles.roleable_id', $familyIds)
+                ->whereIn('users.id', $activeStudentIds)
                 ->where(function($q) use ($query) {
                     $q->where('users.first_name', 'LIKE', "%{$query}%")
                         ->orWhere('users.last_name', 'LIKE', "%{$query}%")

@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateSchoolRequest;
 use App\Models\InvitationToken;
 use App\Models\Role;
 use App\Models\School;
+use App\Models\SchoolYear;
 use App\Models\User;
 use App\Notifications\DirectorInvitation;
 use Illuminate\Http\Request;
@@ -96,6 +97,18 @@ class SchoolController extends Controller
                 'user_id' => $director->id,
                 'role_id' => $directorRole->id,
             ]);
+
+            // Initialise une année scolaire active : sans elle, le directeur tombe
+            // sur des 409 partout dès qu'il essaie de consulter ses données.
+            $now = now();
+            $startYear = $now->month >= 9 ? $now->year : $now->year - 1;
+            $year = new SchoolYear([
+                'label' => $startYear . '-' . ($startYear + 1),
+                'opened_at' => $now,
+                'is_active' => true,
+            ]);
+            $year->school_id = $school->id;
+            $year->save();
 
             $token = Str::random(64);
 

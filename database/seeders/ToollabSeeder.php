@@ -9,6 +9,7 @@ use App\Models\UserRole;
 use App\Models\Role;
 use App\Models\Cursus;
 use App\Models\CursusLevel;
+use App\Models\SchoolYear;
 use App\Models\Tarif;
 use App\Models\Classroom;
 use App\Models\Family;
@@ -25,6 +26,7 @@ class ToollabSeeder extends Seeder
 {
     private $faker;
     private $school;
+    private $schoolYear;
     private $cursus;
     private $levels;
     private $classrooms = [];
@@ -80,6 +82,31 @@ class ToollabSeeder extends Seeder
             'roleable_type' => 'school',
             'roleable_id' => $this->school->id,
         ]);
+
+        $now = Carbon::now();
+        $startYear = $now->month >= 9 ? $now->year : $now->year - 1;
+        $yearLabel = $startYear . '-' . ($startYear + 1);
+
+        $this->schoolYear = SchoolYear::query()
+            ->withoutGlobalScopes()
+            ->where('school_id', $this->school->id)
+            ->where('label', $yearLabel)
+            ->first();
+
+        if (!$this->schoolYear) {
+            $this->schoolYear = new SchoolYear([
+                'label' => $yearLabel,
+                'opened_at' => $now,
+                'is_active' => true,
+            ]);
+            $this->schoolYear->school_id = $this->school->id;
+            $this->schoolYear->save();
+        }
+
+        // Mock du contexte HTTP pour que les traits BelongsToSchool / BelongsToSchoolYear
+        // auto-set les FK sur les modèles créés par le seeder.
+        request()->attributes->set('current_school_id', $this->school->id);
+        request()->attributes->set('current_school_year_id', $this->schoolYear->id);
     }
 
     private function createCursusWithTarifs(): void

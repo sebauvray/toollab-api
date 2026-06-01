@@ -20,6 +20,9 @@ class PaiementController extends Controller
 
     public function show(Family $family)
     {
+        if (!FamilyController::callerCanAccessFamily($family)) {
+            return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+        }
         try {
             $details = $this->paiementService->getDetailsPaiement($family);
 
@@ -38,6 +41,9 @@ class PaiementController extends Controller
 
     public function ajouterLigne(Request $request, Family $family)
     {
+        if (!FamilyController::callerCanAccessFamily($family)) {
+            return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+        }
         $request->validate([
             'type' => 'required|in:espece,carte,cheque,exoneration',
             'montant' => 'required|integer|min:1',
@@ -88,6 +94,9 @@ class PaiementController extends Controller
 
     public function modifierLigne(Request $request, Family $family, LignePaiement $ligne)
     {
+        if (!FamilyController::callerCanAccessFamily($family)) {
+            return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+        }
         if ($ligne->paiement->family_id !== $family->id) {
             return response()->json([
                 'status' => 'error',
@@ -148,6 +157,9 @@ class PaiementController extends Controller
 
     public function supprimerLigne(Request $request, Family $family, LignePaiement $ligne)
     {
+        if (!FamilyController::callerCanAccessFamily($family)) {
+            return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
+        }
         if ($ligne->paiement->family_id !== $family->id) {
             return response()->json([
                 'status' => 'error',

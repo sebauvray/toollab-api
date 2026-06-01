@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToSchoolYear;
 use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class StudentClassroom extends Model
 {
-    use HasFactory, TrackChangesTrait;
+    use HasFactory, TrackChangesTrait, BelongsToSchoolYear;
 
     protected $fillable = [
         'student_id',
@@ -16,10 +17,12 @@ class StudentClassroom extends Model
         'family_id',
         'status',
         'enrollment_date',
+        'tarif_snapshot',
     ];
 
     protected $casts = [
-        'enrollment_date' => 'date'
+        'enrollment_date' => 'date',
+        'tarif_snapshot' => 'array',
     ];
 
     public function student()
