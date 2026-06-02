@@ -12,6 +12,7 @@ use App\Models\CursusLevel;
 use App\Models\SchoolYear;
 use App\Models\Tarif;
 use App\Models\Classroom;
+use App\Models\ClassSchedule;
 use App\Models\Family;
 use App\Models\StudentClassroom;
 use App\Models\Paiement;
@@ -33,6 +34,7 @@ class ToollabSeeder extends Seeder
     private $families = [];
     private $students = [];
     private $responsibles = [];
+    private $teachers = [];
 
     public function __construct()
     {
@@ -45,6 +47,7 @@ class ToollabSeeder extends Seeder
         $this->createCursusWithTarifs();
         $this->createFamilyReductions();
         $this->createArabicClasses();
+        $this->createTeachersAndSchedules();
         $this->createFamilies();
         $this->createStudents();
         $this->enrollStudentsInClasses();
@@ -177,6 +180,83 @@ class ToollabSeeder extends Seeder
             ]);
             
             $this->classrooms[] = $classroom;
+        }
+    }
+
+    private function createTeachersAndSchedules(): void
+    {
+        $teacherRole = Role::where('slug', 'teacher')->first();
+
+        $teacherSeeds = [
+            ['first_name' => 'Samira', 'last_name' => 'Benali', 'email' => 'samira.benali@alhikma.fr'],
+            ['first_name' => 'Faouziya', 'last_name' => 'Tazi', 'email' => 'faouziya.tazi@alhikma.fr'],
+            ['first_name' => 'Isabelle', 'last_name' => 'Martin', 'email' => 'isabelle.martin@alhikma.fr'],
+            ['first_name' => 'Asma', 'last_name' => 'Hassani', 'email' => 'asma.hassani@alhikma.fr'],
+            ['first_name' => 'Karima', 'last_name' => 'Boudiaf', 'email' => 'karima.boudiaf@alhikma.fr'],
+            ['first_name' => 'Ilyas', 'last_name' => 'Mansour', 'email' => 'ilyas.mansour@alhikma.fr'],
+            ['first_name' => 'Abdessamad', 'last_name' => 'Idrissi', 'email' => 'abdessamad.idrissi@alhikma.fr'],
+            ['first_name' => 'Amina', 'last_name' => 'Fassi', 'email' => 'amina.fassi@alhikma.fr'],
+            ['first_name' => 'Bayie', 'last_name' => 'Ouali', 'email' => 'bayie.ouali@alhikma.fr'],
+        ];
+
+        foreach ($teacherSeeds as $seed) {
+            $user = User::firstOrCreate(
+                ['email' => $seed['email']],
+                [
+                    'first_name' => $seed['first_name'],
+                    'last_name' => $seed['last_name'],
+                    'password' => Hash::make('password'),
+                    'access' => 1,
+                ]
+            );
+
+            UserRole::firstOrCreate([
+                'user_id' => $user->id,
+                'role_id' => $teacherRole->id,
+                'roleable_type' => 'school',
+                'roleable_id' => $this->school->id,
+            ]);
+
+            $this->teachers[] = $user;
+        }
+
+        $days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+        $slots = [
+            ['09:00', '11:00'],
+            ['10:00', '12:00'],
+            ['11:00', '13:00'],
+            ['13:30', '15:30'],
+            ['14:00', '16:00'],
+            ['15:30', '17:30'],
+            ['17:00', '19:00'],
+        ];
+
+        foreach ($this->classrooms as $classroom) {
+            $nbSchedules = $this->faker->numberBetween(1, 3);
+            $usedKeys = [];
+
+            for ($i = 0; $i < $nbSchedules; $i++) {
+                $attempt = 0;
+                do {
+                    $day = $this->faker->randomElement($days);
+                    $slot = $this->faker->randomElement($slots);
+                    $key = $day . '|' . $slot[0];
+                    $attempt++;
+                } while (in_array($key, $usedKeys, true) && $attempt < 10);
+
+                if (in_array($key, $usedKeys, true)) continue;
+                $usedKeys[] = $key;
+
+                $teacher = $this->faker->randomElement($this->teachers);
+
+                ClassSchedule::create([
+                    'classroom_id' => $classroom->id,
+                    'teacher_id' => $teacher->id,
+                    'day' => $day,
+                    'start_time' => $slot[0],
+                    'end_time' => $slot[1],
+                ]);
+            }
         }
     }
 
@@ -363,53 +443,52 @@ class ToollabSeeder extends Seeder
     private function enrollStudentsInClasses(): void
     {
         $classroomFillRates = $this->generateClassroomFillRates();
-        
-        $studentsToEnroll = $this->students;
-        shuffle($studentsToEnroll);
-        
+
+        $byGender = ['Femmes' => [], 'Hommes' => [], 'Enfants' => []];
+        $familyByStudent = [];
+        foreach ($this->students as $student) {
+            if ($student->is_child) {
+                $byGender['Enfants'][] = $student;
+            } elseif ($student->gender === 'F') {
+                $byGender['Femmes'][] = $student;
+            } elseif ($student->gender === 'M') {
+                $byGender['Hommes'][] = $student;
+            }
+        }
+        foreach ($this->families as $fId => $fData) {
+            foreach ($fData['students'] as $s) {
+                $familyByStudent[$s->id] = $fId;
+            }
+        }
+
         foreach ($this->classrooms as $index => $classroom) {
             $fillRate = $classroomFillRates[$index];
-            $studentsInClass = (int)($classroom->size * $fillRate);
-            
-            $eligibleStudents = [];
-            if ($classroom->gender === 'Femmes') {
-                $eligibleStudents = array_filter($studentsToEnroll, function($student) {
-                    return !$student->is_child && $student->gender === 'F';
-                });
-            } elseif ($classroom->gender === 'Hommes') {
-                $eligibleStudents = array_filter($studentsToEnroll, function($student) {
-                    return !$student->is_child && $student->gender === 'M';
-                });
-            } else {
-                $eligibleStudents = array_filter($studentsToEnroll, function($student) {
-                    return $student->is_child;
-                });
-            }
-            
+            $target = (int) ($classroom->size * $fillRate);
+            if ($target <= 0) continue;
+
+            $pool = $byGender[$classroom->gender] ?? [];
+            if (empty($pool)) continue;
+
+            shuffle($pool);
             $enrolled = 0;
-            foreach ($eligibleStudents as $key => $student) {
-                if ($enrolled >= $studentsInClass) break;
-                
-                $familyId = null;
-                foreach ($this->families as $fId => $fData) {
-                    if (in_array($student, $fData['students'])) {
-                        $familyId = $fId;
-                        break;
-                    }
-                }
-                
-                if ($familyId) {
-                    StudentClassroom::create([
-                        'student_id' => $student->id,
-                        'classroom_id' => $classroom->id,
-                        'family_id' => $familyId,
-                        'status' => 'active',
-                        'enrollment_date' => Carbon::now()->subDays(rand(1, 30)),
-                    ]);
-                    
-                    unset($studentsToEnroll[array_search($student, $studentsToEnroll)]);
-                    $enrolled++;
-                }
+            foreach ($pool as $student) {
+                if ($enrolled >= $target) break;
+                $familyId = $familyByStudent[$student->id] ?? null;
+                if (!$familyId) continue;
+
+                $exists = StudentClassroom::where('student_id', $student->id)
+                    ->where('classroom_id', $classroom->id)
+                    ->exists();
+                if ($exists) continue;
+
+                StudentClassroom::create([
+                    'student_id' => $student->id,
+                    'classroom_id' => $classroom->id,
+                    'family_id' => $familyId,
+                    'status' => 'active',
+                    'enrollment_date' => Carbon::now()->subDays(rand(1, 30)),
+                ]);
+                $enrolled++;
             }
         }
     }

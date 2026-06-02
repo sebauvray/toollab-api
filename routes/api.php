@@ -5,10 +5,12 @@ use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\InvitationController;
+use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\TarificationController;
+use App\Http\Controllers\Api\TeacherController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserPasswordController;
 use App\Http\Controllers\Api\SchoolYearController;
@@ -53,6 +55,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::middleware('checkrole:director,admin')->group(function () {
                 Route::post('/', [SchoolYearController::class, 'store']);
                 Route::post('/{schoolYear}/close', [SchoolYearController::class, 'close']);
+                Route::post('/{schoolYear}/outcomes-toggle', [SchoolYearController::class, 'toggleOutcomes']);
                 Route::get('/{schoolYear}/classrooms', [SchoolYearController::class, 'classroomsForReconduction']);
             });
         });
@@ -124,6 +127,15 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
                 Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
                 Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
+            });
+
+            Route::middleware('checkrole:director,admin')->get('/schedules', [ScheduleController::class, 'index']);
+
+            Route::middleware('schoolyear')->prefix('teacher')->group(function () {
+                Route::get('/classrooms', [TeacherController::class, 'myClassrooms']);
+                Route::get('/classrooms/{classroom}/students', [TeacherController::class, 'classroomStudents']);
+                Route::post('/classrooms/{classroom}/outcomes', [TeacherController::class, 'saveOutcomes']);
+                Route::get('/schedules', [ScheduleController::class, 'mySchedules']);
             });
 
             Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);

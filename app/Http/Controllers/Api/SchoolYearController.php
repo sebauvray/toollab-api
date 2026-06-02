@@ -29,6 +29,7 @@ class SchoolYearController extends Controller
                 'closed_at' => $y->closed_at,
                 'is_active' => $y->is_active,
                 'is_read_only' => !$y->is_active || $y->closed_at !== null,
+                'outcomes_open' => (bool) $y->outcomes_open,
             ]);
 
         return response()->json(['status' => 'success', 'data' => $years]);
@@ -128,6 +129,7 @@ class SchoolYearController extends Controller
 
         $schoolYear->is_active = false;
         $schoolYear->closed_at = now();
+        $schoolYear->outcomes_open = false;
         $schoolYear->save();
 
         return response()->json([
@@ -137,6 +139,36 @@ class SchoolYearController extends Controller
                 'id' => $schoolYear->id,
                 'closed_at' => $schoolYear->closed_at,
                 'is_active' => $schoolYear->is_active,
+            ],
+        ]);
+    }
+
+    public function toggleOutcomes(Request $request, SchoolYear $schoolYear)
+    {
+        if ($schoolYear->school_id !== currentSchoolId()) {
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
+        if (!$schoolYear->is_active || $schoolYear->closed_at !== null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Année clôturée, module non modifiable',
+            ], 409);
+        }
+
+        $request->validate(['open' => 'required|boolean']);
+
+        $schoolYear->outcomes_open = (bool) $request->input('open');
+        $schoolYear->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $schoolYear->outcomes_open
+                ? 'Saisie des décisions activée'
+                : 'Saisie des décisions désactivée',
+            'data' => [
+                'id' => $schoolYear->id,
+                'outcomes_open' => $schoolYear->outcomes_open,
             ],
         ]);
     }

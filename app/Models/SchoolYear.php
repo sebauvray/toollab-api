@@ -17,12 +17,14 @@ class SchoolYear extends Model
         'opened_at',
         'closed_at',
         'is_active',
+        'outcomes_open',
     ];
 
     protected $casts = [
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
         'is_active' => 'boolean',
+        'outcomes_open' => 'boolean',
     ];
 
     public function classrooms(): HasMany
