@@ -40,12 +40,15 @@ class ImportFamiliesFromCsv extends Command
 
             DB::beginTransaction();
             try {
+                $responsibleBirthdate = !empty($row['R1_DATE NAISSANCE'])
+                    ? \Carbon\Carbon::createFromFormat('d/m/Y', $row['R1_DATE NAISSANCE'])->format('Y-m-d')
+                    : '';
+
                 $existing = User::where('first_name', $row['R1_PRENOM'] ?? '')
                     ->where('last_name', $row['R1_NOM'] ?? '')
-                    ->whereHas('infos', function ($query) use ($row) {
-                        $query->where('key', 'birthdate')
-                            ->where('value', $row['R1_DATE NAISSANCE'] ?? '');
-                    })->first();
+                    ->with(['infos' => fn ($query) => $query->where('key', 'birthdate')])
+                    ->get()
+                    ->first(fn ($user) => $user->infos->first()?->value === $responsibleBirthdate);
 
                 $responsible = $existing ?? User::create([
                     'first_name' => $row['R1_PRENOM'] ?? 'Inconnu',

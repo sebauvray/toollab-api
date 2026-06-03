@@ -12,6 +12,13 @@ class UserInfo extends Model
         'value',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'value' => 'encrypted',
+        ];
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

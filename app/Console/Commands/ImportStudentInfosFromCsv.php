@@ -34,13 +34,13 @@ class ImportStudentInfosFromCsv extends Command
                 }
             }
 
-            $query = User::where('first_name', $firstName)->where('last_name', $lastName);
-            if ($birthdate) {
-                $query->whereHas('infos', function ($q) use ($birthdate) {
-                    $q->where('key', 'birthdate')->where('value', $birthdate);
-                });
-            }
-            $student = $query->first();
+            $query = User::where('first_name', $firstName)
+                ->where('last_name', $lastName)
+                ->with(['infos' => fn ($q) => $q->where('key', 'birthdate')]);
+
+            $student = $birthdate
+                ? $query->get()->first(fn ($user) => $user->infos->first()?->value === $birthdate)
+                : $query->first();
 
             if (!$student) {
                 $this->warn("Étudiant non trouvé: {$lastName} {$firstName} (naissance: {$birthdate})");

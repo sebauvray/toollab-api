@@ -441,28 +441,26 @@ class StatisticsController extends Controller
         $searchValue = $request->input('search_value');
         $schoolId = currentSchoolId();
 
-        $query = LignePaiement::where('type_paiement', 'cheque')
+        $searchLower = mb_strtolower($searchValue);
+
+        $results = LignePaiement::where('type_paiement', 'cheque')
             ->whereHas('paiement.family', function ($q) use ($schoolId) {
                 $q->where('school_id', $schoolId);
             })
-            ->with(['paiement.family.responsibles.infos']);
+            ->with(['paiement.family.responsibles.infos'])
+            ->get()
+            ->filter(function ($ligne) use ($searchType, $searchLower) {
+                $details = $ligne->details ?: [];
 
-        switch ($searchType) {
-            case 'cheque_number':
-                $query->where('details->numero', 'like', '%' . $searchValue . '%');
-                break;
-            case 'emitter_name':
-                $query->where(function ($q) use ($searchValue) {
-                    $q->where('details->nom_emetteur', 'like', '%' . $searchValue . '%')
-                      ->orWhere('details->emetteur', 'like', '%' . $searchValue . '%');
-                });
-                break;
-            case 'bank':
-                $query->where('details->banque', 'like', '%' . $searchValue . '%');
-                break;
-        }
+                $value = match ($searchType) {
+                    'cheque_number' => $details['numero'] ?? '',
+                    'emitter_name' => ($details['nom_emetteur'] ?? '') . ' ' . ($details['emetteur'] ?? ''),
+                    'bank' => $details['banque'] ?? '',
+                };
 
-        $results = $query->get()->map(function ($ligne) {
+                return str_contains(mb_strtolower($value), $searchLower);
+            })
+            ->map(function ($ligne) {
             $details = $ligne->details ?: [];
             return [
                 'id' => $ligne->id,
@@ -486,7 +484,8 @@ class StatisticsController extends Controller
                     }),
                 ],
             ];
-        });
+        })
+            ->values();
 
         return response()->json([
             'status' => 'success',
@@ -572,78 +571,12 @@ class StatisticsController extends Controller
             'paiement.family.students'
         ]);
 
-        // Filtrer par recherche
-        if (!empty($search)) {
-            $query->where(function ($q) use ($search) {
-                // Pour les chèques, rechercher par numéro
-                $q->where(function ($subQ) use ($search) {
-                    $subQ->where('type_paiement', 'cheque')
-                         ->where('details->numero', 'like', '%' . $search . '%');
-                })
-                // Pour tous les types, rechercher dans les familles
-                ->orWhereHas('paiement.family', function ($familyQ) use ($search) {
-                    $familyQ->where(function ($q) use ($search) {
-                        // Rechercher les familles qui ont des responsables correspondants
-                        $q->whereExists(function ($query) use ($search) {
-                            $query->select(DB::raw(1))
-                                  ->from('users')
-                                  ->join('user_roles', function ($join) {
-                                      $join->on('users.id', '=', 'user_roles.user_id')
-                                           ->where('user_roles.roleable_type', '=', 'family');
-                                  })
-                                  ->join('roles', 'user_roles.role_id', '=', 'roles.id')
-                                  ->whereColumn('user_roles.roleable_id', 'families.id')
-                                  ->where('roles.slug', 'responsible')
-                                  ->where(function ($userQ) use ($search) {
-                                      $userQ->where('users.first_name', 'like', '%' . $search . '%')
-                                            ->orWhere('users.last_name', 'like', '%' . $search . '%')
-                                            ->orWhere(DB::raw("CONCAT(users.first_name, ' ', users.last_name)"), 'like', '%' . $search . '%');
-                                  });
-                        })
-                        // Ou rechercher par téléphone
-                        ->orWhereExists(function ($query) use ($search) {
-                            $query->select(DB::raw(1))
-                                  ->from('users')
-                                  ->join('user_roles', function ($join) {
-                                      $join->on('users.id', '=', 'user_roles.user_id')
-                                           ->where('user_roles.roleable_type', '=', 'family');
-                                  })
-                                  ->join('user_infos', 'users.id', '=', 'user_infos.user_id')
-                                  ->whereColumn('user_roles.roleable_id', 'families.id')
-                                  ->where('user_infos.key', 'phone')
-                                  ->where('user_infos.value', 'like', '%' . $search . '%');
-                        });
-                    });
-                });
-            });
-        }
-
         // Filtrer par type de paiement
         if (!empty($paymentType)) {
             $query->where('type_paiement', $paymentType);
         }
 
-        // Filtrer par banques (pour les chèques uniquement)
-        if (!empty($banks)) {
-            $banksArray = explode(',', $banks);
-            $query->where('type_paiement', 'cheque')
-                  ->where(function ($q) use ($banksArray) {
-                      foreach ($banksArray as $bank) {
-                          $q->orWhere('details->banque', 'like', '%' . trim($bank) . '%');
-                      }
-                  });
-        }
-
-        // Compter le total avant pagination
-        $total = $query->count();
-        $totalPages = ceil($total / $perPage);
-        $offset = ($page - 1) * $perPage;
-
-        // Appliquer la pagination et ordonner par date décroissante
-        $payments = $query->orderBy('created_at', 'desc')
-                         ->skip($offset)
-                         ->take($perPage)
-                         ->get();
+        $payments = $query->orderBy('created_at', 'desc')->get();
 
         // Formater les résultats
         $formattedPayments = $payments->map(function ($ligne) {
@@ -707,6 +640,57 @@ class StatisticsController extends Controller
             ];
         });
 
+        if (!empty($search)) {
+            $searchLower = mb_strtolower($search);
+
+            $formattedPayments = $formattedPayments
+                ->filter(function ($payment) use ($searchLower) {
+                    $details = $payment['details'] ?: [];
+                    $searchableValues = [
+                        $details['numero'] ?? null,
+                        $details['banque'] ?? null,
+                        $details['nom_emetteur'] ?? null,
+                        $details['emetteur'] ?? null,
+                        $details['justification'] ?? null,
+                    ];
+
+                    foreach ($payment['family']['responsibles'] ?? [] as $responsible) {
+                        $searchableValues[] = $responsible['name'] ?? null;
+                        $searchableValues[] = $responsible['email'] ?? null;
+                        $searchableValues[] = $responsible['phone'] ?? null;
+                    }
+
+                    foreach ($searchableValues as $value) {
+                        if ($value && str_contains(mb_strtolower((string) $value), $searchLower)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                })
+                ->values();
+        }
+
+        if (!empty($banks)) {
+            $banksArray = collect(explode(',', $banks))
+                ->map(fn ($bank) => mb_strtolower(trim($bank)))
+                ->filter()
+                ->values();
+
+            $formattedPayments = $formattedPayments
+                ->filter(function ($payment) use ($banksArray) {
+                    $bank = mb_strtolower($payment['details']['banque'] ?? '');
+
+                    return $banksArray->contains(fn ($selectedBank) => str_contains($bank, $selectedBank));
+                })
+                ->values();
+        }
+
+        $total = $formattedPayments->count();
+        $totalPages = ceil($total / $perPage);
+        $offset = ($page - 1) * $perPage;
+        $formattedPayments = $formattedPayments->slice($offset, $perPage)->values();
+
 
         return response()->json([
             'status' => 'success',
@@ -726,18 +710,16 @@ class StatisticsController extends Controller
     {
         $schoolId = currentSchoolId();
 
-        // Récupérer toutes les banques uniques pour les paiements par chèque
         $banks = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
             $q->where('school_id', $schoolId);
         })
-        ->where('type_paiement', 'cheque')
-        ->whereNotNull('details->banque')
-        ->get()
-        ->pluck('details.banque')
-        ->unique()
-        ->filter()
-        ->values()
-        ->toArray(); // Convertir en array
+            ->where('type_paiement', 'cheque')
+            ->get()
+            ->map(fn ($ligne) => $ligne->details['banque'] ?? null)
+            ->unique()
+            ->filter()
+            ->values()
+            ->toArray();
 
         // S'assurer qu'on a des banques, sinon retourner une liste par défaut
         if (empty($banks)) {

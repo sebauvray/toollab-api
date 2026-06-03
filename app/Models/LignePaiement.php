@@ -17,11 +17,11 @@ class LignePaiement extends Model
         'type_paiement',
         'montant',
         'details',
-            ];
+    ];
 
     protected $casts = [
         'montant' => 'integer',
-        'details' => 'array'
+        'details' => 'encrypted:array',
     ];
 
     public function paiement()

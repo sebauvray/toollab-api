@@ -11,6 +11,14 @@ class Comment extends Model
         'family_id',
         'user_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'content' => 'encrypted',
+        ];
+    }
+
     public function family(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Family::class);

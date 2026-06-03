@@ -502,46 +502,64 @@ class UserController extends Controller
                 'users.id',
                 'users.first_name',
                 'users.last_name',
-                'user_infos.value as birthdate',
                 'user_roles.roleable_id as family_id'
             ])
                 ->join('user_roles', 'users.id', '=', 'user_roles.user_id')
                 ->join('roles', 'user_roles.role_id', '=', 'roles.id')
-                ->leftJoin('user_infos', function($join) {
-                    $join->on('users.id', '=', 'user_infos.user_id')
-                        ->where('user_infos.key', '=', 'birthdate');
-                })
+                ->with(['infos' => fn ($q) => $q->where('key', 'birthdate')])
                 ->where('roles.slug', 'student')
                 ->where('user_roles.roleable_type', 'family')
                 ->whereIn('user_roles.roleable_id', $familyIds)
                 ->whereIn('users.id', $activeStudentIds)
-                ->where(function($q) use ($query) {
-                    $q->where('users.first_name', 'LIKE', "%{$query}%")
-                        ->orWhere('users.last_name', 'LIKE', "%{$query}%")
-                        ->orWhereRaw("CONCAT(users.first_name, ' ', users.last_name) LIKE ?", ["%{$query}%"])
-                        ->orWhereRaw("CONCAT(users.last_name, ' ', users.first_name) LIKE ?", ["%{$query}%"])
-                        ->orWhere('user_infos.value', 'LIKE', "%{$query}%")
-                        ->orWhereRaw("DATE_FORMAT(user_infos.value, '%d/%m') LIKE ?", ["%{$query}%"])
-                        ->orWhereRaw("DATE_FORMAT(user_infos.value, '%d/%m/%Y') LIKE ?", ["%{$query}%"]);
-                })
                 ->orderBy('users.first_name')
                 ->orderBy('users.last_name')
-                ->limit(10)
                 ->get()
+                ->filter(function($student) use ($query) {
+                    $queryLower = mb_strtolower($query);
+                    $firstName = mb_strtolower($student->first_name ?? '');
+                    $lastName = mb_strtolower($student->last_name ?? '');
+                    $fullName = trim($firstName . ' ' . $lastName);
+                    $reverseName = trim($lastName . ' ' . $firstName);
+                    $birthdate = $student->infos->first()?->value;
+                    $birthdateFormats = [];
+
+                    if ($birthdate) {
+                        try {
+                            $date = \Carbon\Carbon::parse($birthdate);
+                            $birthdateFormats = [
+                                mb_strtolower($birthdate),
+                                $date->format('d/m'),
+                                $date->format('d/m/Y'),
+                            ];
+                        } catch (\Exception) {
+                            $birthdateFormats = [mb_strtolower($birthdate)];
+                        }
+                    }
+
+                    return str_contains($firstName, $queryLower)
+                        || str_contains($lastName, $queryLower)
+                        || str_contains($fullName, $queryLower)
+                        || str_contains($reverseName, $queryLower)
+                        || collect($birthdateFormats)->contains(fn ($value) => str_contains($value, $queryLower));
+                })
+                ->take(10)
                 ->map(function($student) {
+                    $birthdate = $student->infos->first()?->value;
+
                     return [
                         'id' => $student->id,
                         'first_name' => $student->first_name,
                         'last_name' => $student->last_name,
                         'full_name' => $student->first_name . ' ' . $student->last_name,
-                        'birthdate' => $student->birthdate,
-                        'birthdate_formatted' => $student->birthdate ?
-                            \Carbon\Carbon::parse($student->birthdate)->format('d/m/Y') : null,
+                        'birthdate' => $birthdate,
+                        'birthdate_formatted' => $birthdate ?
+                            \Carbon\Carbon::parse($birthdate)->format('d/m/Y') : null,
                         'family_id' => $student->family_id,
                         'display_text' => $student->first_name . ' ' . $student->last_name .
-                            ($student->birthdate ? ' - ' . \Carbon\Carbon::parse($student->birthdate)->format('d/m/Y') : '')
+                            ($birthdate ? ' - ' . \Carbon\Carbon::parse($birthdate)->format('d/m/Y') : '')
                     ];
-                });
+                })
+                ->values();
 
             return response()->json([
                 'status' => 'success',
