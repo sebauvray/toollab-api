@@ -35,4 +35,3 @@ jobs:
           script: |
             cd $PROJECT_DIR
             docker compose -f docker-compose.yml -f docker-compose-prod.yml up -d --build
-            docker compose exec -T php php artisan storage:link || true
