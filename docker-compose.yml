@@ -17,8 +17,10 @@ services:
   api:
     container_name: ${CONTAINER_NAME_API:-api-toollab}
     image: php_toollab
+    env_file: .env
     build:
-      context: ./docker/php/
+      context: .
+      dockerfile: docker/php/Dockerfile
       target: dev
       args:
         - CURRENT_USER=${CURRENT_USER}
@@ -26,6 +28,9 @@ services:
         - TZ=${TZ}
     volumes:
       - ./:/var/www
+      # vendor dans un volume nommé : persiste entre les démarrages
+      # (composer install incrémental) et n'est pas masqué par le bind mount.
+      - vendor:/var/www/vendor
     restart: unless-stopped
     depends_on:
       - db
@@ -67,3 +72,4 @@ volumes:
   persistent_db:
     name: ${DB_VOLUME_NAME:-db_data}
     driver: local
+  vendor:

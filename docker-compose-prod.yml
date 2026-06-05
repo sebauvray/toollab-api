@@ -14,5 +14,12 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
       target: prod
+    # Image immuable : pas de montage du code. Seul storage persiste
+    # (logs/uploads) dans un volume nommé.
+    volumes: !override
+      - storage:/var/www/storage
   db:
     ports: !reset []
+
+volumes:
+  storage:
