@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Family;
 use App\Models\Classroom;
 use App\Models\StudentClassroom;
+use App\Models\UserRole;
 use App\Models\Paiement;
 use App\Models\LignePaiement;
 use App\Models\Cursus;
@@ -25,24 +26,61 @@ class StatisticsController extends Controller
 
     public function overview(Request $request)
     {
-        $user = $request->user();
         $schoolId = currentSchoolId();
-        
+
         $school = School::find($schoolId);
         if (!$school) {
             return response()->json(['error' => 'École non trouvée'], 404);
         }
 
+        $financials = $this->computeFamilyFinancials($schoolId);
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'enrollments' => $this->getEnrollmentStats($schoolId),
-                'payments' => $this->getPaymentStats($schoolId),
+                'payments' => $this->getPaymentStats($schoolId, $financials),
                 'classes' => $this->getClassStats($schoolId),
-                'families' => $this->getFamilyStats($schoolId),
+                'families' => $this->getFamilyStats($financials),
                 'cursus' => $this->getCursusStats($schoolId),
             ]
         ]);
+    }
+
+    private function computeFamilyFinancials($schoolId): array
+    {
+        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
+            $query->where('school_id', $schoolId);
+        })
+            ->where('status', 'active')
+            ->distinct()
+            ->pluck('family_id');
+
+        $paidByFamily = Paiement::whereIn('family_id', $familyIds)
+            ->withSum('lignes', 'montant')
+            ->get()
+            ->mapWithKeys(fn ($paiement) => [$paiement->family_id => (int) $paiement->lignes_sum_montant]);
+
+        $familiesWithStudents = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $familyIds)
+            ->whereHas('role', fn ($q) => $q->where('slug', 'student'))
+            ->distinct('roleable_id')
+            ->count('roleable_id');
+
+        $families = Family::whereIn('id', $familyIds)->get();
+
+        $byFamily = [];
+        foreach ($families as $family) {
+            $byFamily[$family->id] = [
+                'expected' => (int) ($this->tarifCalculator->calculerTotalFamille($family)['total'] ?? 0),
+                'paid' => $paidByFamily[$family->id] ?? 0,
+            ];
+        }
+
+        return [
+            'families' => $byFamily,
+            'with_students' => $familiesWithStudents,
+        ];
     }
 
     private function getEnrollmentStats($schoolId)
@@ -72,28 +110,25 @@ class StatisticsController extends Controller
         foreach ($students as $student) {
             $gender = $student->infos->where('key', 'gender')->first()?->value;
             $birthdate = $student->infos->where('key', 'birthdate')->first()?->value;
-            
-            if ($birthdate) {
-                $age = Carbon::parse($birthdate)->age;
-                if ($age < 16) {
-                    $stats['children']++;
-                } else {
-                    if ($gender === 'M') {
-                        $stats['men']++;
-                    } else {
-                        $stats['women']++;
-                    }
-                }
+
+            $age = $birthdate ? Carbon::parse($birthdate)->age : null;
+
+            if ($age !== null && $age < 16) {
+                $stats['children']++;
+            } elseif ($gender === 'M') {
+                $stats['men']++;
+            } else {
+                $stats['women']++;
             }
         }
 
         return $stats;
     }
 
-    private function getPaymentStats($schoolId)
+    private function getPaymentStats($schoolId, array $financials)
     {
         $families = Family::where('school_id', $schoolId)->pluck('id');
-        
+
         $payments = LignePaiement::whereHas('paiement', function ($query) use ($families) {
             $query->whereIn('family_id', $families);
         })->get();
@@ -120,7 +155,7 @@ class StatisticsController extends Controller
             ],
         ];
 
-        $expectedRevenue = $this->calculateExpectedRevenue($schoolId);
+        $expectedRevenue = array_sum(array_column($financials['families'], 'expected'));
         $stats['remaining'] = round($expectedRevenue - $stats['total_amount']);
         $stats['expected'] = round($expectedRevenue);
         $stats['payment_rate'] = $expectedRevenue > 0 ? round(($stats['total_amount'] / $expectedRevenue) * 100, 2) : 0;
@@ -128,35 +163,11 @@ class StatisticsController extends Controller
         return $stats;
     }
 
-    private function calculateExpectedRevenue($schoolId)
-    {
-        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
-            $query->where('school_id', $schoolId);
-        })
-            ->where('status', 'active')
-            ->distinct()
-            ->pluck('family_id');
-
-        $totalExpected = 0;
-        foreach ($familyIds as $familyId) {
-            $family = Family::query()->withoutGlobalScopes()->find($familyId);
-            if (!$family) continue;
-            $totalExpected += $this->calculateFamilyExpectedAmount($family);
-        }
-
-        return $totalExpected;
-    }
-
     private function getClassStats($schoolId)
     {
-        $classrooms = Classroom::where('school_id', $schoolId)->get();
-        
-        foreach ($classrooms as $classroom) {
-            $activeStudentsCount = StudentClassroom::where('classroom_id', $classroom->id)
-                ->where('status', 'active')
-                ->count();
-            $classroom->students_count = $activeStudentsCount;
-        }
+        $classrooms = Classroom::where('school_id', $schoolId)
+            ->withCount('activeStudents')
+            ->get();
 
         $stats = [
             'total' => $classrooms->count(),
@@ -171,8 +182,8 @@ class StatisticsController extends Controller
         ];
 
         foreach ($classrooms as $classroom) {
-            $fillRate = $classroom->size > 0 ? ($classroom->students_count / $classroom->size) : 0;
-            
+            $fillRate = $classroom->size > 0 ? ($classroom->active_students_count / $classroom->size) : 0;
+
             if ($fillRate >= 1) {
                 $stats['complete']++;
             } elseif ($fillRate > 0) {
@@ -189,86 +200,35 @@ class StatisticsController extends Controller
         return $stats;
     }
 
-    private function getFamilyStats($schoolId)
+    private function getFamilyStats(array $financials)
     {
-        // Familles ayant au moins une inscription active dans une classe de l'année courante.
-        // whereHas('classroom') applique le global scope BelongsToSchoolYear de Classroom.
-        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
-            $query->where('school_id', $schoolId);
-        })
-            ->where('status', 'active')
-            ->distinct()
-            ->pluck('family_id');
+        $paidCount = 0;
+        $partiallyPaidCount = 0;
+        $fullyUnpaidCount = 0;
 
-        $families = Family::whereIn('id', $familyIds)->get();
-
-        $unpaidFamilies = [];
-        $partiallyPaidFamilies = [];
-        $paidFamilies = [];
-        $totalWithStudents = 0;
-
-        foreach ($families as $family) {
-            // Count students for this family
-            $studentCount = $family->students()->count();
-            if ($studentCount > 0) {
-                $totalWithStudents++;
-            }
-
-            $expectedAmount = $this->calculateFamilyExpectedAmount($family);
-            $paidAmount = $this->getFamilyPaidAmount($family->id);
-            
-            if ($expectedAmount > 0) {
-                if ($paidAmount < $expectedAmount) {
-                    $unpaidFamilies[] = [
-                        'id' => $family->id,
-                        'expected' => round($expectedAmount),
-                        'paid' => round($paidAmount),
-                        'remaining' => round($expectedAmount - $paidAmount),
-                    ];
-                    
-                    if ($paidAmount > 0) {
-                        $partiallyPaidFamilies[] = [
-                            'id' => $family->id,
-                            'expected' => round($expectedAmount),
-                            'paid' => round($paidAmount),
-                            'remaining' => round($expectedAmount - $paidAmount),
-                        ];
-                    }
-                } elseif ($paidAmount >= $expectedAmount) {
-                    $paidFamilies[] = [
-                        'id' => $family->id,
-                        'expected' => round($expectedAmount),
-                        'paid' => round($paidAmount),
-                    ];
-                }
+        foreach ($financials['families'] as $f) {
+            if ($f['expected'] <= 0 || $f['paid'] >= $f['expected']) {
+                $paidCount++;
+            } elseif ($f['paid'] > 0) {
+                $partiallyPaidCount++;
+            } else {
+                $fullyUnpaidCount++;
             }
         }
 
         return [
-            'total' => $families->count(),
-            'with_students' => $totalWithStudents,
-            'paid_count' => count($paidFamilies),
-            'unpaid_count' => count($unpaidFamilies),
-            'partially_paid_count' => count($partiallyPaidFamilies),
-            'unpaid_families' => $unpaidFamilies,
-            'partially_paid_families' => $partiallyPaidFamilies,
-            'paid_families' => $paidFamilies,
+            'total' => count($financials['families']),
+            'with_students' => $financials['with_students'],
+            'paid_count' => $paidCount,
+            'partially_paid_count' => $partiallyPaidCount,
+            'fully_unpaid_count' => $fullyUnpaidCount,
+            'unpaid_count' => $partiallyPaidCount + $fullyUnpaidCount,
         ];
     }
 
     private function calculateFamilyExpectedAmount($family)
     {
         return (int) ($this->tarifCalculator->calculerTotalFamille($family)['total'] ?? 0);
-    }
-
-    private function getFamilyPaidAmount($familyId)
-    {
-        $paiement = Paiement::where('family_id', $familyId)->first();
-        if (!$paiement) {
-            return 0;
-        }
-
-        return LignePaiement::where('paiement_id', $paiement->id)->sum('montant');
     }
 
     private function getCursusStats($schoolId)
@@ -328,45 +288,51 @@ class StatisticsController extends Controller
         $search = $request->input('search', '');
         $filter = $request->input('filter', ''); // 'unpaid' ou 'partial'
 
-        // Familles avec au moins une inscription active dans l'année courante.
-        $familyIds = StudentClassroom::whereHas('classroom', function ($query) use ($schoolId) {
-            $query->where('school_id', $schoolId);
-        })
-            ->where('status', 'active')
-            ->distinct()
-            ->pluck('family_id');
+        $financials = $this->computeFamilyFinancials($schoolId);
 
-        $families = Family::whereIn('id', $familyIds)->get();
+        $owingIds = [];
+        foreach ($financials['families'] as $familyId => $f) {
+            if ($f['expected'] > 0 && $f['paid'] < $f['expected']) {
+                $owingIds[] = $familyId;
+            }
+        }
+
+        $rolesByFamily = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $owingIds)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['responsible', 'student']))
+            ->with(['role:id,slug', 'user.infos' => fn ($q) => $q->where('key', 'phone')])
+            ->get()
+            ->groupBy('roleable_id');
 
         $unpaidData = [];
 
-        foreach ($families as $family) {
-            $expectedAmount = $this->calculateFamilyExpectedAmount($family);
-            $paidAmount = $this->getFamilyPaidAmount($family->id);
-            
-            if ($paidAmount < $expectedAmount) {
-                $responsibles = $family->responsibles()->with('infos')->get();
-                $students = $family->students()->with('infos')->get();
-                
-                $unpaidData[] = [
-                    'id' => $family->id,
-                    'responsibles' => $responsibles->map(function ($r) {
-                        // Récupérer le numéro de téléphone depuis UserInfo
-                        $phoneInfo = $r->infos()->where('key', 'phone')->first();
-                        return [
-                            'id' => $r->id,
-                            'name' => $r->first_name . ' ' . $r->last_name,
-                            'email' => $r->email,
-                            'phone' => $phoneInfo ? $phoneInfo->value : null,
-                        ];
-                    }),
-                    'students_count' => $students->count(),
-                    'expected' => round($expectedAmount),
-                    'paid' => round($paidAmount),
-                    'remaining' => round($expectedAmount - $paidAmount),
-                    'payment_rate' => $expectedAmount > 0 ? round(($paidAmount / $expectedAmount) * 100, 2) : 0,
-                ];
-            }
+        foreach ($owingIds as $familyId) {
+            $f = $financials['families'][$familyId];
+            $expectedAmount = $f['expected'];
+            $paidAmount = $f['paid'];
+            $roles = $rolesByFamily->get($familyId, collect());
+
+            $responsibles = $roles
+                ->filter(fn ($ur) => $ur->role->slug === 'responsible' && $ur->user)
+                ->map(function ($ur) {
+                    $phoneInfo = $ur->user->infos->firstWhere('key', 'phone');
+                    return [
+                        'id' => $ur->user->id,
+                        'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
+                        'email' => $ur->user->email,
+                        'phone' => $phoneInfo?->value,
+                    ];
+                })->values();
+
+            $unpaidData[] = [
+                'id' => $familyId,
+                'responsibles' => $responsibles,
+                'students_count' => $roles->filter(fn ($ur) => $ur->role->slug === 'student')->count(),
+                'expected' => $expectedAmount,
+                'paid' => $paidAmount,
+                'remaining' => $expectedAmount - $paidAmount,
+                'payment_rate' => $expectedAmount > 0 ? round(($paidAmount / $expectedAmount) * 100, 2) : 0,
+            ];
         }
 
         // Apply filters
@@ -445,7 +411,7 @@ class StatisticsController extends Controller
             ->whereHas('paiement.family', function ($q) use ($schoolId) {
                 $q->where('school_id', $schoolId);
             })
-            ->with(['paiement.family.responsibles.infos']);
+            ->with('paiement.family');
 
         switch ($searchType) {
             case 'cheque_number':
@@ -462,8 +428,39 @@ class StatisticsController extends Controller
                 break;
         }
 
-        $results = $query->get()->map(function ($ligne) {
+        $lignes = $query->get();
+
+        $familyIds = $lignes->map(fn ($ligne) => $ligne->paiement?->family?->id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $responsiblesByFamily = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $familyIds)
+            ->whereHas('role', fn ($q) => $q->where('slug', 'responsible'))
+            ->with(['user.infos' => fn ($q) => $q->where('key', 'phone')])
+            ->get()
+            ->groupBy('roleable_id');
+
+        $results = $lignes->map(function ($ligne) use ($responsiblesByFamily) {
             $details = $ligne->details ?: [];
+            $family = $ligne->paiement?->family;
+            $responsibles = collect();
+
+            if ($family) {
+                $responsibles = $responsiblesByFamily->get($family->id, collect())
+                    ->filter(fn ($ur) => $ur->user)
+                    ->map(function ($ur) {
+                        $phoneInfo = $ur->user->infos->firstWhere('key', 'phone');
+                        return [
+                            'id' => $ur->user->id,
+                            'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
+                            'email' => $ur->user->email,
+                            'phone' => $phoneInfo?->value,
+                        ];
+                    })->values();
+            }
+
             return [
                 'id' => $ligne->id,
                 'amount' => $ligne->montant,
@@ -473,18 +470,10 @@ class StatisticsController extends Controller
                     'banque' => $details['banque'] ?? ''
                 ],
                 'payment_date' => $ligne->created_at->format('Y-m-d'),
-                'family' => [
-                    'id' => $ligne->paiement->family->id,
-                    'responsibles' => $ligne->paiement->family->responsibles->map(function ($r) {
-                        $phoneInfo = $r->infos()->where('key', 'phone')->first();
-                        return [
-                            'id' => $r->id,
-                            'name' => $r->first_name . ' ' . $r->last_name,
-                            'email' => $r->email,
-                            'phone' => $phoneInfo ? $phoneInfo->value : null,
-                        ];
-                    }),
-                ],
+                'family' => $family ? [
+                    'id' => $family->id,
+                    'responsibles' => $responsibles,
+                ] : null,
             ];
         });
 
@@ -563,14 +552,7 @@ class StatisticsController extends Controller
         $query = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
             $q->where('school_id', $schoolId);
         })
-        ->with([
-            'paiement.family.responsibles' => function($q) {
-                $q->with(['infos' => function($query) {
-                    $query->where('key', 'phone');
-                }]);
-            },
-            'paiement.family.students'
-        ]);
+        ->with('paiement.family');
 
         // Filtrer par recherche
         if (!empty($search)) {
@@ -634,92 +616,109 @@ class StatisticsController extends Controller
                   });
         }
 
-        // Compter le total avant pagination
-        $total = $query->count();
-        $totalPages = ceil($total / $perPage);
-        $offset = ($page - 1) * $perPage;
+        $needsExonerationFilter = $paymentType === 'exoneration' && in_array($exonerationType, ['complete', 'partial']);
 
-        // Appliquer la pagination et ordonner par date décroissante
-        $payments = $query->orderBy('created_at', 'desc')
-                         ->skip($offset)
-                         ->take($perPage)
-                         ->get();
+        if ($needsExonerationFilter) {
+            $formatted = $this->formatPaymentLignes(
+                $query->orderBy('created_at', 'desc')->get()
+            )->filter(function ($payment) use ($exonerationType) {
+                $isComplete = $payment['total_expected'] > 0
+                    ? $payment['amount'] >= $payment['total_expected']
+                    : true;
+                return $exonerationType === 'complete' ? $isComplete : !$isComplete;
+            })->values();
 
-        // Formater les résultats
-        $formattedPayments = $payments->map(function ($ligne) {
-            $details = $ligne->details ?: [];
-            $family = $ligne->paiement ? $ligne->paiement->family : null;
-            
-            $responsibles = [];
-            $students = [];
-            
-            if ($family) {
-                // Charger manuellement les responsables
-                $responsibleUsers = User::whereHas('roles', function ($query) use ($family) {
-                    $query->where('roleable_type', 'family')
-                        ->where('roleable_id', $family->id)
-                        ->whereHas('role', function ($q) {
-                            $q->where('slug', 'responsible');
-                        });
-                })->with(['infos' => function($q) {
-                    $q->where('key', 'phone');
-                }])->get();
-                
-                $responsibles = $responsibleUsers->map(function ($r) {
-                    $phoneInfo = $r->infos->where('key', 'phone')->first();
-                    return [
-                        'id' => $r->id,
-                        'name' => trim($r->first_name . ' ' . $r->last_name),
-                        'email' => $r->email,
-                        'phone' => $phoneInfo ? $phoneInfo->value : null,
-                    ];
-                })->values()->toArray();
-                
-                // Charger les étudiants
-                $studentUsers = User::whereHas('roles', function ($query) use ($family) {
-                    $query->where('roleable_type', 'family')
-                        ->where('roleable_id', $family->id)
-                        ->whereHas('role', function ($q) {
-                            $q->where('slug', 'student');
-                        });
-                })->get();
-                
-                $students = $studentUsers->map(function ($s) {
-                    return [
-                        'id' => $s->id,
-                        'name' => trim($s->first_name . ' ' . $s->last_name),
-                    ];
-                })->values()->toArray();
-            }
-            
-            return [
-                'id' => $ligne->id,
-                'amount' => $ligne->montant,
-                'type' => $ligne->type_paiement,
-                'payment_date' => $ligne->created_at->format('Y-m-d H:i'),
-                'details' => $details,
-                'family' => $family ? [
-                    'id' => $family->id,
-                    'responsibles' => $responsibles,
-                    'students' => $students,
-                ] : null,
-                'total_expected' => $family ? $this->calculateFamilyExpectedAmount($family) : 0,
-            ];
-        });
+            $total = $formatted->count();
+            $totalPages = (int) ceil($total / $perPage);
+            $items = $formatted->slice(($page - 1) * $perPage, $perPage)->values();
+        } else {
+            $total = $query->count();
+            $totalPages = (int) ceil($total / $perPage);
+            $offset = ($page - 1) * $perPage;
 
+            $items = $this->formatPaymentLignes(
+                $query->orderBy('created_at', 'desc')->skip($offset)->take($perPage)->get()
+            );
+        }
 
         return response()->json([
             'status' => 'success',
             'data' => [
-                'items' => $formattedPayments,
+                'items' => $items,
                 'pagination' => [
                     'current_page' => (int) $page,
-                    'total_pages' => (int) $totalPages,
+                    'total_pages' => $totalPages,
                     'per_page' => (int) $perPage,
                     'total' => $total
                 ]
             ]
         ]);
+    }
+
+    private function formatPaymentLignes($lignes)
+    {
+        $familyIds = $lignes->map(fn ($ligne) => $ligne->paiement?->family?->id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $rolesByFamily = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $familyIds)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['responsible', 'student']))
+            ->with(['role:id,slug', 'user.infos' => fn ($q) => $q->where('key', 'phone')])
+            ->get()
+            ->groupBy('roleable_id');
+
+        $expectedCache = [];
+
+        return $lignes->map(function ($ligne) use ($rolesByFamily, &$expectedCache) {
+            $family = $ligne->paiement?->family;
+            $responsibles = [];
+            $students = [];
+            $totalExpected = 0;
+
+            if ($family) {
+                $roles = $rolesByFamily->get($family->id, collect());
+
+                $responsibles = $roles
+                    ->filter(fn ($ur) => $ur->role->slug === 'responsible' && $ur->user)
+                    ->map(function ($ur) {
+                        $phoneInfo = $ur->user->infos->firstWhere('key', 'phone');
+                        return [
+                            'id' => $ur->user->id,
+                            'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
+                            'email' => $ur->user->email,
+                            'phone' => $phoneInfo?->value,
+                        ];
+                    })->values()->toArray();
+
+                $students = $roles
+                    ->filter(fn ($ur) => $ur->role->slug === 'student' && $ur->user)
+                    ->map(fn ($ur) => [
+                        'id' => $ur->user->id,
+                        'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
+                    ])->values()->toArray();
+
+                if (!isset($expectedCache[$family->id])) {
+                    $expectedCache[$family->id] = $this->calculateFamilyExpectedAmount($family);
+                }
+                $totalExpected = $expectedCache[$family->id];
+            }
+
+            return [
+                'id' => $ligne->id,
+                'amount' => $ligne->montant,
+                'type' => $ligne->type_paiement,
+                'payment_date' => $ligne->created_at->format('Y-m-d H:i'),
+                'details' => $ligne->details ?: [],
+                'family' => $family ? [
+                    'id' => $family->id,
+                    'responsibles' => $responsibles,
+                    'students' => $students,
+                ] : null,
+                'total_expected' => $totalExpected,
+            ];
+        });
     }
 
     public function availableBanks(Request $request)
