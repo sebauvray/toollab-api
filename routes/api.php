@@ -139,6 +139,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                 Route::get('/classrooms/{classroom}/students', [TeacherController::class, 'classroomStudents']);
                 Route::post('/classrooms/{classroom}/outcomes', [TeacherController::class, 'saveOutcomes']);
                 Route::get('/classrooms/{classroom}/attendance', [TeacherController::class, 'classroomAttendance']);
+                Route::get('/classrooms/{classroom}/attendance-matrix', [TeacherController::class, 'classroomAttendanceMatrix']);
                 Route::post('/classrooms/{classroom}/attendance', [TeacherController::class, 'saveAttendance']);
                 Route::get('/schedules', [ScheduleController::class, 'mySchedules']);
             });

@@ -275,7 +275,7 @@ class TeacherController extends Controller
 
         $request->validate([
             'date' => 'required|date',
-            'records' => 'required|array|min:1',
+            'records' => 'present|array',
             'records.*.student_id' => 'required|integer|exists:users,id',
             'records.*.status' => 'required|in:present,absent_justifie,absent_non_justifie',
             'records.*.justification' => 'nullable|string|max:2000',
@@ -288,8 +288,9 @@ class TeacherController extends Controller
             ->all();
 
         $date = $request->input('date');
+        $keptIds = [];
 
-        DB::transaction(function () use ($request, $classroom, $date, $enrolledIds) {
+        DB::transaction(function () use ($request, $classroom, $date, $enrolledIds, &$keptIds) {
             foreach ($request->input('records') as $r) {
                 if (!in_array((int) $r['student_id'], $enrolledIds, true)) {
                     continue;
@@ -306,12 +307,69 @@ class TeacherController extends Controller
                         'justification' => $r['status'] === 'absent_justifie' ? ($r['justification'] ?? null) : null,
                     ]
                 );
+                $keptIds[] = (int) $r['student_id'];
             }
+
+            Attendance::where('classroom_id', $classroom->id)
+                ->whereDate('date', $date)
+                ->whereNotIn('student_id', $keptIds ?: [0])
+                ->delete();
         });
 
         return response()->json([
             'status' => 'success',
             'message' => 'Émargement enregistré',
+        ]);
+    }
+
+    public function classroomAttendanceMatrix(Classroom $classroom)
+    {
+        if ($resp = $this->guardClassroom($classroom)) {
+            return $resp;
+        }
+
+        $yearId = currentSchoolYearId();
+        $year = $yearId ? SchoolYear::find($yearId) : null;
+
+        $attendances = Attendance::query()
+            ->where('classroom_id', $classroom->id)
+            ->get();
+
+        $dates = $attendances
+            ->map(fn ($a) => $a->date->toDateString())
+            ->unique()
+            ->sort()
+            ->values();
+
+        $attByStudent = $attendances->groupBy('student_id');
+
+        $students = StudentClassroom::query()
+            ->where('classroom_id', $classroom->id)
+            ->where('status', 'active')
+            ->with('student:id,first_name,last_name')
+            ->get()
+            ->sortBy(fn ($sc) => mb_strtolower(trim(($sc->student?->last_name ?? '') . ' ' . ($sc->student?->first_name ?? ''))))
+            ->values()
+            ->map(function (StudentClassroom $sc) use ($attByStudent) {
+                $att = [];
+                foreach (($attByStudent->get($sc->student_id) ?? collect()) as $a) {
+                    $att[$a->date->toDateString()] = ['status' => $a->status, 'justification' => $a->justification];
+                }
+                return [
+                    'student_id' => $sc->student_id,
+                    'first_name' => $sc->student?->first_name,
+                    'last_name' => $sc->student?->last_name,
+                    'attendance' => $att,
+                ];
+            });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'year_closed' => $year ? !$year->isOpen() : true,
+                'dates' => $dates,
+                'students' => $students,
+            ],
         ]);
     }
 }
