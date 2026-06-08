@@ -45,6 +45,8 @@ class SchoolYearController extends Controller
                 'nullable', 'integer',
                 \Illuminate\Validation\Rule::exists('school_years', 'id')->where('school_id', $schoolId),
             ],
+            'clone_cursus_ids' => ['nullable', 'array'],
+            'clone_cursus_ids.*' => ['integer'],
         ]);
 
         $exists = SchoolYear::query()
@@ -88,7 +90,7 @@ class SchoolYearController extends Controller
                 ]);
 
                 if ($sourceYearId !== null) {
-                    $this->cloneTarification($sourceYearId, $year->id);
+                    $this->cloneTarification($sourceYearId, $year->id, $request->input('clone_cursus_ids'));
                 }
 
                 return $year;
@@ -316,26 +318,28 @@ class SchoolYearController extends Controller
      * Clone tarifs + réductions de l'année source vers la cible.
      * Les cursus eux-mêmes sont permanents donc inchangés.
      */
-    private function cloneTarification(int $sourceYearId, int $targetYearId): void
+    private function cloneTarification(int $sourceYearId, int $targetYearId, ?array $cursusIds = null): void
     {
         $now = now();
         $userId = auth()->id();
 
         $tables = [
-            'tarifs' => ['cursus_id', 'prix', 'actif'],
-            'reduction_familiales' => ['cursus_id', 'nombre_eleves_min', 'pourcentage_reduction', 'actif'],
-            'reduction_multi_cursuses' => ['cursus_beneficiaire_id', 'cursus_requis_id', 'pourcentage_reduction', 'actif'],
+            'tarifs' => ['filter' => 'cursus_id', 'cols' => ['cursus_id', 'prix', 'actif']],
+            'reduction_familiales' => ['filter' => 'cursus_id', 'cols' => ['cursus_id', 'nombre_eleves_min', 'pourcentage_reduction', 'actif']],
+            'reduction_multi_cursuses' => ['filter' => 'cursus_beneficiaire_id', 'cols' => ['cursus_beneficiaire_id', 'cursus_requis_id', 'pourcentage_reduction', 'actif']],
         ];
 
-        foreach ($tables as $table => $columns) {
-            DB::table($table)
-                ->where('school_year_id', $sourceYearId)
-                ->orderBy('id')
-                ->chunkById(200, function ($rows) use ($table, $columns, $targetYearId, $now, $userId) {
+        foreach ($tables as $table => $def) {
+            $query = DB::table($table)->where('school_year_id', $sourceYearId);
+            if ($cursusIds !== null) {
+                $query->whereIn($def['filter'], $cursusIds);
+            }
+            $query->orderBy('id')
+                ->chunkById(200, function ($rows) use ($table, $def, $targetYearId, $now, $userId) {
                     $payload = [];
                     foreach ($rows as $row) {
                         $base = ['school_year_id' => $targetYearId, 'created_by' => $userId, 'updated_by' => null, 'created_at' => $now, 'updated_at' => $now];
-                        foreach ($columns as $col) {
+                        foreach ($def['cols'] as $col) {
                             $base[$col] = $row->$col;
                         }
                         $payload[] = $base;

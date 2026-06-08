@@ -126,8 +126,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
             Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
                 Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
+                Route::get('/{classroom}/suivi', [ClassroomController::class, 'adminSuivi']);
                 Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
             });
+
+            Route::middleware('checkrole:director,admin')->get('/admin/outcomes', [ClassroomController::class, 'adminOutcomesOverview']);
 
             Route::middleware('checkrole:director,admin')->get('/schedules', [ScheduleController::class, 'index']);
 
