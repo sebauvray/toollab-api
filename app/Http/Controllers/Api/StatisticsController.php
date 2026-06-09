@@ -14,6 +14,7 @@ use App\Models\Cursus;
 use App\Models\Tarif;
 use App\Models\School;
 use App\Services\TarifCalculatorService;
+use App\Services\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -285,94 +286,7 @@ class StatisticsController extends Controller
         $schoolId = currentSchoolId();
         $page = $request->input('page', 1);
         $perPage = min((int) $request->input('per_page', 10), 100);
-        $search = $request->input('search', '');
-        $filter = $request->input('filter', ''); // 'unpaid' ou 'partial'
-
-        $financials = $this->computeFamilyFinancials($schoolId);
-
-        $owingIds = [];
-        foreach ($financials['families'] as $familyId => $f) {
-            if ($f['expected'] > 0 && $f['paid'] < $f['expected']) {
-                $owingIds[] = $familyId;
-            }
-        }
-
-        $rolesByFamily = UserRole::where('roleable_type', 'family')
-            ->whereIn('roleable_id', $owingIds)
-            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['responsible', 'student']))
-            ->with(['role:id,slug', 'user.infos' => fn ($q) => $q->where('key', 'phone')])
-            ->get()
-            ->groupBy('roleable_id');
-
-        $unpaidData = [];
-
-        foreach ($owingIds as $familyId) {
-            $f = $financials['families'][$familyId];
-            $expectedAmount = $f['expected'];
-            $paidAmount = $f['paid'];
-            $roles = $rolesByFamily->get($familyId, collect());
-
-            $responsibles = $roles
-                ->filter(fn ($ur) => $ur->role->slug === 'responsible' && $ur->user)
-                ->map(function ($ur) {
-                    $phoneInfo = $ur->user->infos->firstWhere('key', 'phone');
-                    return [
-                        'id' => $ur->user->id,
-                        'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
-                        'email' => $ur->user->email,
-                        'phone' => $phoneInfo?->value,
-                    ];
-                })->values();
-
-            $unpaidData[] = [
-                'id' => $familyId,
-                'responsibles' => $responsibles,
-                'students_count' => $roles->filter(fn ($ur) => $ur->role->slug === 'student')->count(),
-                'expected' => $expectedAmount,
-                'paid' => $paidAmount,
-                'remaining' => $expectedAmount - $paidAmount,
-                'payment_rate' => $expectedAmount > 0 ? round(($paidAmount / $expectedAmount) * 100, 2) : 0,
-            ];
-        }
-
-        // Apply filters
-        $unpaidFamilies = $unpaidData;
-        
-        // Apply search filter if provided
-        if (!empty($search)) {
-            $unpaidFamilies = array_filter($unpaidFamilies, function ($family) use ($search) {
-                $searchLower = strtolower($search);
-                
-                // Search in responsible names, emails, and phone numbers
-                foreach ($family['responsibles'] as $responsible) {
-                    if (str_contains(strtolower($responsible['name']), $searchLower) ||
-                        str_contains(strtolower($responsible['email']), $searchLower) ||
-                        ($responsible['phone'] && str_contains(strtolower($responsible['phone']), $searchLower))) {
-                        return true;
-                    }
-                }
-                
-                return false;
-            });
-        }
-        
-        // Apply type filter if provided
-        if (!empty($filter)) {
-            $unpaidFamilies = array_filter($unpaidFamilies, function ($family) use ($filter) {
-                if ($filter === 'unpaid') {
-                    // Only families with paid = 0
-                    return $family['paid'] == 0;
-                } elseif ($filter === 'partial') {
-                    // Only families with paid > 0 and paid < expected
-                    return $family['paid'] > 0 && $family['paid'] < $family['expected'];
-                }
-                // If filter is not recognized, return all
-                return true;
-            });
-        }
-        
-        // Reset array keys after filtering
-        $unpaidFamilies = array_values($unpaidFamilies);
+        $unpaidFamilies = $this->collectUnpaidFamilies($request, $schoolId);
 
         // Implement pagination
         $total = count($unpaidFamilies);
@@ -544,77 +458,10 @@ class StatisticsController extends Controller
         $schoolId = currentSchoolId();
         $page = $request->input('page', 1);
         $perPage = min((int) $request->input('per_page', 10), 100);
-        $search = $request->input('search', '');
         $paymentType = $request->input('payment_type', '');
-        $banks = $request->input('banks', '');
         $exonerationType = $request->input('exoneration_type', '');
 
-        $query = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
-            $q->where('school_id', $schoolId);
-        })
-        ->with('paiement.family');
-
-        // Filtrer par recherche
-        if (!empty($search)) {
-            $query->where(function ($q) use ($search) {
-                // Pour les chèques, rechercher par numéro
-                $q->where(function ($subQ) use ($search) {
-                    $subQ->where('type_paiement', 'cheque')
-                         ->where('details->numero', 'like', '%' . $search . '%');
-                })
-                // Pour tous les types, rechercher dans les familles
-                ->orWhereHas('paiement.family', function ($familyQ) use ($search) {
-                    $familyQ->where(function ($q) use ($search) {
-                        // Rechercher les familles qui ont des responsables correspondants
-                        $q->whereExists(function ($query) use ($search) {
-                            $query->select(DB::raw(1))
-                                  ->from('users')
-                                  ->join('user_roles', function ($join) {
-                                      $join->on('users.id', '=', 'user_roles.user_id')
-                                           ->where('user_roles.roleable_type', '=', 'family');
-                                  })
-                                  ->join('roles', 'user_roles.role_id', '=', 'roles.id')
-                                  ->whereColumn('user_roles.roleable_id', 'families.id')
-                                  ->where('roles.slug', 'responsible')
-                                  ->where(function ($userQ) use ($search) {
-                                      $userQ->where('users.first_name', 'like', '%' . $search . '%')
-                                            ->orWhere('users.last_name', 'like', '%' . $search . '%')
-                                            ->orWhere(DB::raw("CONCAT(users.first_name, ' ', users.last_name)"), 'like', '%' . $search . '%');
-                                  });
-                        })
-                        // Ou rechercher par téléphone
-                        ->orWhereExists(function ($query) use ($search) {
-                            $query->select(DB::raw(1))
-                                  ->from('users')
-                                  ->join('user_roles', function ($join) {
-                                      $join->on('users.id', '=', 'user_roles.user_id')
-                                           ->where('user_roles.roleable_type', '=', 'family');
-                                  })
-                                  ->join('user_infos', 'users.id', '=', 'user_infos.user_id')
-                                  ->whereColumn('user_roles.roleable_id', 'families.id')
-                                  ->where('user_infos.key', 'phone')
-                                  ->where('user_infos.value', 'like', '%' . $search . '%');
-                        });
-                    });
-                });
-            });
-        }
-
-        // Filtrer par type de paiement
-        if (!empty($paymentType)) {
-            $query->where('type_paiement', $paymentType);
-        }
-
-        // Filtrer par banques (pour les chèques uniquement)
-        if (!empty($banks)) {
-            $banksArray = explode(',', $banks);
-            $query->where('type_paiement', 'cheque')
-                  ->where(function ($q) use ($banksArray) {
-                      foreach ($banksArray as $bank) {
-                          $q->orWhere('details->banque', 'like', '%' . trim($bank) . '%');
-                      }
-                  });
-        }
+        $query = $this->buildPaymentsQuery($request, $schoolId);
 
         $needsExonerationFilter = $paymentType === 'exoneration' && in_array($exonerationType, ['complete', 'partial']);
 
@@ -653,6 +500,247 @@ class StatisticsController extends Controller
                 ]
             ]
         ]);
+    }
+
+    private function buildPaymentsQuery(Request $request, int $schoolId)
+    {
+        $search = $request->input('search', '');
+        $paymentType = $request->input('payment_type', '');
+        $banks = $request->input('banks', '');
+
+        $query = LignePaiement::whereHas('paiement.family', function ($q) use ($schoolId) {
+            $q->where('school_id', $schoolId);
+        })->with('paiement.family');
+
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where(function ($subQ) use ($search) {
+                    $subQ->where('type_paiement', 'cheque')
+                         ->where('details->numero', 'like', '%' . $search . '%');
+                })
+                ->orWhereHas('paiement.family', function ($familyQ) use ($search) {
+                    $familyQ->where(function ($q) use ($search) {
+                        $q->whereExists(function ($query) use ($search) {
+                            $query->select(DB::raw(1))
+                                  ->from('users')
+                                  ->join('user_roles', function ($join) {
+                                      $join->on('users.id', '=', 'user_roles.user_id')
+                                           ->where('user_roles.roleable_type', '=', 'family');
+                                  })
+                                  ->join('roles', 'user_roles.role_id', '=', 'roles.id')
+                                  ->whereColumn('user_roles.roleable_id', 'families.id')
+                                  ->where('roles.slug', 'responsible')
+                                  ->where(function ($userQ) use ($search) {
+                                      $userQ->where('users.first_name', 'like', '%' . $search . '%')
+                                            ->orWhere('users.last_name', 'like', '%' . $search . '%')
+                                            ->orWhere(DB::raw("CONCAT(users.first_name, ' ', users.last_name)"), 'like', '%' . $search . '%');
+                                  });
+                        })
+                        ->orWhereExists(function ($query) use ($search) {
+                            $query->select(DB::raw(1))
+                                  ->from('users')
+                                  ->join('user_roles', function ($join) {
+                                      $join->on('users.id', '=', 'user_roles.user_id')
+                                           ->where('user_roles.roleable_type', '=', 'family');
+                                  })
+                                  ->join('user_infos', 'users.id', '=', 'user_infos.user_id')
+                                  ->whereColumn('user_roles.roleable_id', 'families.id')
+                                  ->where('user_infos.key', 'phone')
+                                  ->where('user_infos.value', 'like', '%' . $search . '%');
+                        });
+                    });
+                });
+            });
+        }
+
+        if (!empty($paymentType)) {
+            $query->where('type_paiement', $paymentType);
+        }
+
+        if (!empty($banks)) {
+            $banksArray = explode(',', $banks);
+            $query->where('type_paiement', 'cheque')
+                  ->where(function ($q) use ($banksArray) {
+                      foreach ($banksArray as $bank) {
+                          $q->orWhere('details->banque', 'like', '%' . trim($bank) . '%');
+                      }
+                  });
+        }
+
+        return $query;
+    }
+
+    public function exportPayments(Request $request)
+    {
+        $schoolId = currentSchoolId();
+        $paymentType = $request->input('payment_type', '');
+        $exonerationType = $request->input('exoneration_type', '');
+
+        $formatted = $this->formatPaymentLignes(
+            $this->buildPaymentsQuery($request, $schoolId)->orderBy('created_at', 'desc')->get()
+        );
+
+        if ($paymentType === 'exoneration' && in_array($exonerationType, ['complete', 'partial'])) {
+            $formatted = $formatted->filter(function ($payment) use ($exonerationType) {
+                $isComplete = $payment['total_expected'] > 0
+                    ? $payment['amount'] >= $payment['total_expected']
+                    : true;
+                return $exonerationType === 'complete' ? $isComplete : !$isComplete;
+            })->values();
+        }
+
+        $respName = fn ($p) => collect($p['family']['responsibles'] ?? [])->pluck('name')->filter()->implode(', ');
+        $respField = function ($p, $key) {
+            $first = collect($p['family']['responsibles'] ?? [])->first();
+            return $first[$key] ?? null;
+        };
+
+        if ($paymentType === 'cheque') {
+            $headers = ['Date', 'Responsable(s)', 'Email', 'Téléphone', 'Banque', 'N° chèque', 'Émetteur', 'Montant (€)'];
+            $rows = $formatted->map(fn ($p) => [
+                $p['payment_date'],
+                $respName($p),
+                $respField($p, 'email'),
+                $respField($p, 'phone'),
+                $p['details']['banque'] ?? null,
+                $p['details']['numero'] ?? null,
+                $p['details']['nom_emetteur'] ?? ($p['details']['emetteur'] ?? null),
+                $p['amount'],
+            ]);
+            $filename = 'cheques';
+        } elseif ($paymentType === 'exoneration') {
+            $headers = ['Date', 'Responsable(s)', 'Email', 'Téléphone', 'Motif', 'Type', 'Montant (€)', 'Attendu (€)'];
+            $rows = $formatted->map(function ($p) use ($respName, $respField) {
+                $isComplete = $p['total_expected'] > 0 ? $p['amount'] >= $p['total_expected'] : true;
+                return [
+                    $p['payment_date'],
+                    $respName($p),
+                    $respField($p, 'email'),
+                    $respField($p, 'phone'),
+                    $p['details']['justification'] ?? ($p['details']['motif'] ?? null),
+                    $isComplete ? 'Complète' : 'Partielle',
+                    $p['amount'],
+                    $p['total_expected'],
+                ];
+            });
+            $filename = 'exonerations';
+        } else {
+            $headers = ['Date', 'Responsable(s)', 'Email', 'Téléphone', 'Type', 'Montant (€)'];
+            $rows = $formatted->map(fn ($p) => [
+                $p['payment_date'],
+                $respName($p),
+                $respField($p, 'email'),
+                $respField($p, 'phone'),
+                $p['type'],
+                $p['amount'],
+            ]);
+            $filename = 'paiements';
+        }
+
+        return ExportService::xlsx($filename, $headers, $rows);
+    }
+
+    private function collectUnpaidFamilies(Request $request, int $schoolId): array
+    {
+        $search = $request->input('search', '');
+        $filter = $request->input('filter', '');
+
+        $financials = $this->computeFamilyFinancials($schoolId);
+
+        $owingIds = [];
+        foreach ($financials['families'] as $familyId => $f) {
+            if ($f['expected'] > 0 && $f['paid'] < $f['expected']) {
+                $owingIds[] = $familyId;
+            }
+        }
+
+        $rolesByFamily = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $owingIds)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['responsible', 'student']))
+            ->with(['role:id,slug', 'user.infos' => fn ($q) => $q->where('key', 'phone')])
+            ->get()
+            ->groupBy('roleable_id');
+
+        $unpaidData = [];
+        foreach ($owingIds as $familyId) {
+            $f = $financials['families'][$familyId];
+            $roles = $rolesByFamily->get($familyId, collect());
+
+            $responsibles = $roles
+                ->filter(fn ($ur) => $ur->role->slug === 'responsible' && $ur->user)
+                ->map(function ($ur) {
+                    $phoneInfo = $ur->user->infos->firstWhere('key', 'phone');
+                    return [
+                        'id' => $ur->user->id,
+                        'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
+                        'email' => $ur->user->email,
+                        'phone' => $phoneInfo?->value,
+                    ];
+                })->values();
+
+            $unpaidData[] = [
+                'id' => $familyId,
+                'responsibles' => $responsibles,
+                'students_count' => $roles->filter(fn ($ur) => $ur->role->slug === 'student')->count(),
+                'expected' => $f['expected'],
+                'paid' => $f['paid'],
+                'remaining' => $f['expected'] - $f['paid'],
+                'payment_rate' => $f['expected'] > 0 ? round(($f['paid'] / $f['expected']) * 100, 2) : 0,
+            ];
+        }
+
+        if (!empty($search)) {
+            $searchLower = strtolower($search);
+            $unpaidData = array_filter($unpaidData, function ($family) use ($searchLower) {
+                foreach ($family['responsibles'] as $responsible) {
+                    if (str_contains(strtolower($responsible['name']), $searchLower)
+                        || str_contains(strtolower((string) $responsible['email']), $searchLower)
+                        || ($responsible['phone'] && str_contains(strtolower($responsible['phone']), $searchLower))) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        if (!empty($filter)) {
+            $unpaidData = array_filter($unpaidData, function ($family) use ($filter) {
+                if ($filter === 'unpaid') {
+                    return $family['paid'] == 0;
+                }
+                if ($filter === 'partial') {
+                    return $family['paid'] > 0 && $family['paid'] < $family['expected'];
+                }
+                return true;
+            });
+        }
+
+        return array_values($unpaidData);
+    }
+
+    public function exportUnpaidFamilies(Request $request)
+    {
+        $schoolId = currentSchoolId();
+        $unpaid = $this->collectUnpaidFamilies($request, $schoolId);
+
+        $headers = ['Responsable(s)', 'Email', 'Téléphone', 'Nb élèves', 'Attendu (€)', 'Payé (€)', 'Reste à payer (€)', 'Taux (%)'];
+
+        $rows = array_map(function ($f) {
+            $responsibles = collect($f['responsibles']);
+            $first = $responsibles->first();
+            return [
+                $responsibles->pluck('name')->filter()->implode(', '),
+                $first['email'] ?? null,
+                $first['phone'] ?? null,
+                $f['students_count'],
+                $f['expected'],
+                $f['paid'],
+                $f['remaining'],
+                $f['payment_rate'],
+            ];
+        }, $unpaid);
+
+        return ExportService::xlsx('familles_impayees', $headers, $rows);
     }
 
     private function formatPaymentLignes($lignes)

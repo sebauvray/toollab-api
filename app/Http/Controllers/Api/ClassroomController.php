@@ -10,6 +10,7 @@ use App\Models\Classroom;
 use App\Models\ClassSchedule;
 use App\Models\StudentClassroom;
 use App\Models\StudentYearOutcome;
+use App\Services\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -384,6 +385,45 @@ class ClassroomController extends Controller
                 ];
             })
         ]);
+    }
+
+    public function exportClassrooms()
+    {
+        $schoolId = currentSchoolId();
+
+        $classrooms = Classroom::query()
+            ->where('school_id', $schoolId)
+            ->with('cursus:id,name', 'level:id,name', 'schedules.teacher:id,first_name,last_name')
+            ->withCount('activeStudents')
+            ->orderBy('cursus_id')
+            ->orderBy('level_id')
+            ->orderBy('name')
+            ->get();
+
+        $headers = ['Cursus', 'Niveau', 'Classe', 'Genre', 'Effectif', 'Capacité', 'Professeur(s)', 'Créneaux'];
+
+        $rows = $classrooms->map(function (Classroom $classroom) {
+            $teacher = $classroom->schedules
+                ->map(fn ($s) => $s->teacher ? trim($s->teacher->first_name . ' ' . $s->teacher->last_name) : ($s->teacher_name ?: null))
+                ->filter()->unique()->values()->implode(', ');
+
+            $creneaux = $classroom->schedules
+                ->map(fn ($s) => trim(($s->day ?? '') . ' ' . substr((string) $s->start_time, 0, 5) . '-' . substr((string) $s->end_time, 0, 5)))
+                ->filter()->implode(' ; ');
+
+            return [
+                $classroom->cursus?->name,
+                $classroom->level?->name,
+                $classroom->name,
+                $classroom->gender,
+                $classroom->active_students_count,
+                (int) $classroom->size,
+                $teacher,
+                $creneaux,
+            ];
+        });
+
+        return ExportService::xlsx('classes', $headers, $rows);
     }
 
     public function removeStudentFromClass(Request $request, $classroomId, $studentId)

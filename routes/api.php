@@ -94,6 +94,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::put('/users/{user}/info', [UserController::class, 'updateUserInfo'])->whereNumber('user');
 
             Route::prefix('families')->group(function () {
+                Route::middleware('checkrole:director,admin')->get('/export', [FamilyController::class, 'exportStudents']);
                 Route::get('/', [FamilyController::class, 'index']);
                 Route::post('/', [FamilyController::class, 'store']);
                 Route::get('/{family}', [FamilyController::class, 'show']);
@@ -126,6 +127,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
             Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
                 Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
+                Route::get('/export', [ClassroomController::class, 'exportClassrooms']);
                 Route::get('/{classroom}/suivi', [ClassroomController::class, 'adminSuivi']);
                 Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
             });
@@ -173,6 +175,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                 Route::get('/enrollment-trends', [StatisticsController::class, 'enrollmentTrends']);
                 Route::get('/revenue-by-month', [StatisticsController::class, 'revenueByMonth']);
                 Route::get('/payments', [StatisticsController::class, 'payments']);
+                Route::get('/export-payments', [StatisticsController::class, 'exportPayments']);
+                Route::get('/export-unpaid-families', [StatisticsController::class, 'exportUnpaidFamilies']);
                 Route::get('/available-banks', [StatisticsController::class, 'availableBanks']);
             });
         });

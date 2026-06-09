@@ -11,6 +11,7 @@ use App\Models\UserRole;
 use App\Models\StudentClassroom;
 use App\Traits\PaginationTrait;
 use App\Services\PaiementService;
+use App\Services\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -170,6 +171,71 @@ class FamilyController extends Controller
                 'pagination' => $paginatedData['pagination']
             ]
         ]);
+    }
+
+    public function exportStudents(Request $request)
+    {
+        $schoolId = currentSchoolId();
+
+        $familyIds = Family::query()->where('school_id', $schoolId)->pluck('id');
+
+        $rolesByFamily = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $familyIds)
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['responsible', 'student']))
+            ->with(['role:id,slug', 'user.infos'])
+            ->get()
+            ->groupBy('roleable_id');
+
+        $studentIds = UserRole::where('roleable_type', 'family')
+            ->whereIn('roleable_id', $familyIds)
+            ->whereHas('role', fn ($q) => $q->where('slug', 'student'))
+            ->pluck('user_id')
+            ->unique();
+
+        $classesByStudent = StudentClassroom::query()
+            ->where('status', 'active')
+            ->whereIn('student_id', $studentIds)
+            ->whereHas('classroom')
+            ->with('classroom:id,name')
+            ->get()
+            ->groupBy('student_id')
+            ->map(fn ($group) => $group->map(fn ($sc) => $sc->classroom?->name)->filter()->unique()->values()->implode(', '));
+
+        $rows = [];
+        foreach ($familyIds as $familyId) {
+            $roles = $rolesByFamily->get($familyId, collect());
+
+            $responsibles = $roles->filter(fn ($ur) => $ur->role->slug === 'responsible' && $ur->user)->values();
+            $students = $roles->filter(fn ($ur) => $ur->role->slug === 'student' && $ur->user)->values();
+
+            $respNames = $responsibles->map(fn ($ur) => trim($ur->user->first_name . ' ' . $ur->user->last_name))->filter()->implode(', ');
+            $primary = $responsibles->first();
+            $primaryInfos = $primary ? collect($primary->user->infos)->pluck('value', 'key')->toArray() : [];
+
+            foreach ($students as $sur) {
+                $studentInfos = collect($sur->user->infos)->pluck('value', 'key')->toArray();
+                $rows[] = [
+                    'last_name' => $sur->user->last_name,
+                    'first_name' => $sur->user->first_name,
+                    'birthdate' => $studentInfos[self::KEY_BIRTHDATE] ?? null,
+                    'classes' => $classesByStudent->get($sur->user->id, ''),
+                    'responsibles' => $respNames ?: null,
+                    'email' => $primary?->user?->email,
+                    'phone' => $primaryInfos[self::KEY_PHONE] ?? null,
+                    'address' => $primaryInfos[self::KEY_ADDRESS] ?? null,
+                    'zipcode' => $primaryInfos[self::KEY_ZIPCODE] ?? null,
+                    'city' => $primaryInfos[self::KEY_CITY] ?? null,
+                ];
+            }
+        }
+
+        usort($rows, fn ($a, $b) => mb_strtolower(($a['last_name'] ?? '') . ' ' . ($a['first_name'] ?? '')) <=> mb_strtolower(($b['last_name'] ?? '') . ' ' . ($b['first_name'] ?? '')));
+
+        $headers = ['Nom élève', 'Prénom élève', 'Date de naissance', 'Classes', 'Responsable(s)', 'Email responsable', 'Téléphone', 'Adresse', 'Code postal', 'Ville'];
+
+        $data = array_map(fn ($r) => array_values($r), $rows);
+
+        return ExportService::xlsx('eleves', $headers, $data);
     }
 
     private function calculatePaymentStatus(Family $family): string
