@@ -136,45 +136,31 @@ class FamilyController extends Controller
 
         $paginatedData = $this->paginateQuery($query, $request);
 
-        $formattedItems = collect($paginatedData['items'])->flatMap(function ($family) {
+        $formattedItems = collect($paginatedData['items'])->map(function ($family) {
             $responsables = $family->userRoles;
+            $premier = $responsables->first(fn ($r) => $r->user);
 
-            if ($responsables->isEmpty()) {
-                return [[
-                    'id' => $family->id,
-                    'nom' => 'Sans responsable',
-                    'nombreEleves' => $family->students_count,
-                    'status' => $this->calculatePaymentStatus($family),
-                    'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
-                    'contact' => [
-                        'phone' => null,
-                        'email' => null,
-                        'address' => null,
-                        'zipcode' => null,
-                        'city' => null
-                    ]
-                ]];
-            }
+            $noms = $responsables
+                ->map(fn ($r) => $r->user ? trim($r->user->first_name . ' ' . $r->user->last_name) : null)
+                ->filter()
+                ->values();
 
-            return $responsables->map(function ($responsable) use ($family) {
-                $user = $responsable->user;
-                $userInfos = $user ? collect($user->infos)->pluck('value', 'key')->toArray() : [];
+            $userInfos = $premier && $premier->user ? collect($premier->user->infos)->pluck('value', 'key')->toArray() : [];
 
-                return [
-                    'id' => $family->id,
-                    'nom' => $user ? $user->first_name . ' ' . $user->last_name : 'Sans responsable',
-                    'nombreEleves' => $family->students_count,
-                    'status' => $this->calculatePaymentStatus($family),
-                    'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
-                    'contact' => [
-                        'phone' => $userInfos[self::KEY_PHONE] ?? null,
-                        'email' => $user ? $user->email : null,
-                        'address' => $userInfos[self::KEY_ADDRESS] ?? null,
-                        'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
-                        'city' => $userInfos[self::KEY_CITY] ?? null
-                    ]
-                ];
-            });
+            return [
+                'id' => $family->id,
+                'nom' => $noms->isNotEmpty() ? $noms->implode(', ') : 'Sans responsable',
+                'nombreEleves' => $family->students_count,
+                'status' => $this->calculatePaymentStatus($family),
+                'dateInscription' => $family->created_at->locale('fr_FR')->format('d M Y, H:i'),
+                'contact' => [
+                    'phone' => $userInfos[self::KEY_PHONE] ?? null,
+                    'email' => $premier && $premier->user ? $premier->user->email : null,
+                    'address' => $userInfos[self::KEY_ADDRESS] ?? null,
+                    'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
+                    'city' => $userInfos[self::KEY_CITY] ?? null
+                ]
+            ];
         });
 
         return response()->json([

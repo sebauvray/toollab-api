@@ -23,7 +23,7 @@ class ClassroomController extends Controller
             $query->where('cursus_id', $request->cursus_id);
         }
 
-        $perPage = $request->get('per_page', 10);
+        $perPage = min((int) $request->get('per_page', 10), 100);
         $classrooms = $query->paginate($perPage);
 
         $items = $classrooms->items();
@@ -496,9 +496,16 @@ class ClassroomController extends Controller
 
         $classrooms = Classroom::query()
             ->where('school_id', $schoolId)
-            ->with('cursus:id,name', 'level:id,name,order')
+            ->with('cursus:id,name', 'level:id,name,order', 'schedules.teacher:id,first_name,last_name')
             ->get()
             ->keyBy('id');
+
+        $teacherByClassroom = $classrooms->map(fn ($c) => $c->schedules
+            ->map(fn ($s) => $s->teacher ? trim($s->teacher->first_name . ' ' . $s->teacher->last_name) : ($s->teacher_name ?: null))
+            ->filter()
+            ->unique()
+            ->values()
+            ->implode(', ') ?: null);
 
         $outcomes = StudentYearOutcome::query()
             ->where('school_year_id', $yearId)
@@ -510,7 +517,7 @@ class ClassroomController extends Controller
             ->where('status', 'active')
             ->with('student:id,first_name,last_name')
             ->get()
-            ->map(function (StudentClassroom $sc) use ($classrooms, $outcomes) {
+            ->map(function (StudentClassroom $sc) use ($classrooms, $outcomes, $teacherByClassroom) {
                 $c = $classrooms->get($sc->classroom_id);
                 $o = $outcomes->get($sc->student_id . '-' . $sc->classroom_id);
                 return [
@@ -519,6 +526,7 @@ class ClassroomController extends Controller
                     'last_name' => $sc->student?->last_name,
                     'classroom_id' => $sc->classroom_id,
                     'classroom_name' => $c?->name,
+                    'teacher' => $teacherByClassroom->get($sc->classroom_id),
                     'cursus' => $c?->cursus?->name,
                     'cursus_id' => $c?->cursus_id,
                     'level' => $c?->level?->name,

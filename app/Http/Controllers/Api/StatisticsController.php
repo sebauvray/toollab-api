@@ -284,7 +284,7 @@ class StatisticsController extends Controller
     {
         $schoolId = currentSchoolId();
         $page = $request->input('page', 1);
-        $perPage = $request->input('per_page', 10);
+        $perPage = min((int) $request->input('per_page', 10), 100);
         $search = $request->input('search', '');
         $filter = $request->input('filter', ''); // 'unpaid' ou 'partial'
 
@@ -543,7 +543,7 @@ class StatisticsController extends Controller
     {
         $schoolId = currentSchoolId();
         $page = $request->input('page', 1);
-        $perPage = $request->input('per_page', 20);
+        $perPage = min((int) $request->input('per_page', 10), 100);
         $search = $request->input('search', '');
         $paymentType = $request->input('payment_type', '');
         $banks = $request->input('banks', '');

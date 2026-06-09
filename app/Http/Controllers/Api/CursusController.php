@@ -17,7 +17,7 @@ class CursusController extends Controller
     {
         $query = Cursus::with(['levels', 'classrooms']);
 
-        $perPage = $request->get('per_page', 10);
+        $perPage = min((int) $request->get('per_page', 10), 100);
         $cursuses = $query->paginate($perPage);
 
         $items = $cursuses->items();
