@@ -176,7 +176,7 @@ class TeacherController extends Controller
         }
 
         $request->validate([
-            'decisions' => 'required|array|min:1',
+            'decisions' => 'present|array',
             'decisions.*.student_id' => 'required|integer|exists:users,id',
             'decisions.*.outcome' => 'required|in:passage,redoublement,exclusion,fin_cursus',
             'decisions.*.commentaire' => 'nullable|string|max:2000',
@@ -188,7 +188,9 @@ class TeacherController extends Controller
             ->pluck('student_id')
             ->all();
 
-        DB::transaction(function () use ($request, $classroom, $year, $enrolledIds) {
+        $keptIds = [];
+
+        DB::transaction(function () use ($request, $classroom, $year, $enrolledIds, &$keptIds) {
             foreach ($request->input('decisions') as $d) {
                 if (!in_array((int) $d['student_id'], $enrolledIds, true)) continue;
 
@@ -205,7 +207,13 @@ class TeacherController extends Controller
                         'decided_at' => now(),
                     ]
                 );
+                $keptIds[] = (int) $d['student_id'];
             }
+
+            StudentYearOutcome::where('classroom_id', $classroom->id)
+                ->where('school_year_id', $year->id)
+                ->whereNotIn('student_id', $keptIds ?: [0])
+                ->delete();
         });
 
         return response()->json([
