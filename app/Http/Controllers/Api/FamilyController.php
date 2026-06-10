@@ -37,7 +37,7 @@ class FamilyController extends Controller
     /**
      * Le caller (auth user) a-t-il le droit d'accéder à $family ?
      * - super-admin : oui
-     * - director / admin de l'école : oui
+     * - director / admin / registar de l'école : oui
      * - rattaché à la famille (responsible ou student) : oui
      * - sinon : non (renvoyer 403)
      */
@@ -52,12 +52,12 @@ class FamilyController extends Controller
             return false;
         }
 
-        $isAdmin = UserRole::where('user_id', $caller->id)
+        $isStaff = UserRole::where('user_id', $caller->id)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $family->school_id)
-            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin']))
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin', 'registar']))
             ->exists();
-        if ($isAdmin) return true;
+        if ($isStaff) return true;
 
         return UserRole::where('user_id', $caller->id)
             ->where('roleable_type', 'family')
@@ -102,17 +102,15 @@ class FamilyController extends Controller
     {
         $query = Family::query();
 
-        // Pour les non-admins, ne montrer que les familles auxquelles le user
-        // est rattaché (responsible ou student). Director/admin/super-admin voient tout.
         $caller = auth()->user();
         $schoolId = currentSchoolId();
-        $isAdmin = $caller && ($caller->is_super_admin || UserRole::where('user_id', $caller->id)
+        $isStaff = $caller && ($caller->is_super_admin || UserRole::where('user_id', $caller->id)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
-            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin']))
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin', 'registar']))
             ->exists());
 
-        if (!$isAdmin) {
+        if (!$isStaff) {
             $myFamilyIds = UserRole::where('user_id', $caller->id)
                 ->where('roleable_type', 'family')
                 ->pluck('roleable_id');
@@ -389,90 +387,6 @@ class FamilyController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la création de la famille',
-            ], 500);
-        }
-    }
-
-    public function update(Request $request, Family $family, User $user)
-    {
-        if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
-
-        $request->validate([
-            'lastname' => 'required|string|max:255',
-            'firstname' => 'required|string|max:255',
-            'phone' => 'required|string',
-            'address' => 'required|string',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'zipcode' => 'required|string',
-            'city' => 'required|string',
-            'is_student' => 'boolean',
-            'birthdate' => 'required_if:is_student,true|nullable|date',
-            'gender' => 'required_if:is_student,true|nullable|in:M,F',
-        ], [
-            'lastname.required' => 'Le nom est requis.',
-            'lastname.string' => 'Le nom doit être une chaîne de caractères.',
-            'lastname.max' => 'Le nom ne peut pas dépasser 255 caractères.',
-
-            'firstname.required' => 'Le prénom est requis.',
-            'firstname.string' => 'Le prénom doit être une chaîne de caractères.',
-            'firstname.max' => 'Le prénom ne peut pas dépasser 255 caractères.',
-
-            'email.required' => 'L\'adresse email est requise.',
-            'email.email' => 'L\'adresse email doit être une adresse valide.',
-            'email.unique' => 'L\'adresse email est déjà utilisée.',
-
-            'phone.required' => 'Le numéro de téléphone est requis.',
-            'phone.string' => 'Le numéro de téléphone doit être une chaîne de caractères.',
-
-            'address.required' => 'L\'adresse est requise.',
-            'address.string' => 'L\'adresse doit être une chaîne de caractères.',
-
-            'zipcode.required' => 'Le code postal est requis.',
-            'zipcode.string' => 'Le code postal doit être une chaîne de caractères.',
-
-            'city.required' => 'La ville est requise.',
-            'city.string' => 'La ville doit être une chaîne de caractères.',
-
-            'is_student.boolean' => 'Le champ "est étudiant" doit être vrai ou faux.',
-
-            'birthdate.required_if' => 'La date de naissance est obligatoire pour les étudiants.',
-            'birthdate.date' => 'La date de naissance doit être une date valide.',
-
-            'gender.required_if' => 'Le genre est obligatoire pour les étudiants.',
-            'gender.in' => 'Le genre doit être "M" (masculin) ou "F" (féminin).',
-        ]);
-
-        DB::beginTransaction();
-
-        try {
-            $user->first_name = $request->firstname;
-            $user->last_name = $request->lastname;
-            $user->email = $request->email;
-            $user->save();
-
-            $this->updateOrCreateUserInfo($user, self::KEY_PHONE, $request->phone);
-            $this->updateOrCreateUserInfo($user, self::KEY_ADDRESS, $request->address);
-            $this->updateOrCreateUserInfo($user, self::KEY_ZIPCODE, $request->zipcode);
-            $this->updateOrCreateUserInfo($user, self::KEY_CITY, $request->city);
-
-            if ($request->is_student) {
-                $this->updateOrCreateUserInfo($user, self::KEY_BIRTHDATE, $request->birthdate);
-                $this->updateOrCreateUserInfo($user, self::KEY_GENDER, $request->gender);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Responsable mis à jour avec succès',
-                'data' => $user->refresh()
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Une erreur est survenue lors de la mise à jour du responsable',
-                'error' => 'Une erreur est survenue'
             ], 500);
         }
     }

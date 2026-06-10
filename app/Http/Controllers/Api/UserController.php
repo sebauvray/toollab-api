@@ -84,9 +84,9 @@ class UserController extends Controller
     }
 
     /**
-     * Plus permissif que canManageUser : autorise tout user qui partage
-     * l'école courante avec $target (direct, via famille ou classroom).
-     * Pour les écritures du quotidien (infos contact d'un membre famille, etc.).
+     * Plus permissif que canManageUser : autorise le staff de l'école courante
+     * (director/admin/registar), le user lui-même, ou un membre de la même
+     * famille que $target. Pour les écritures du quotidien (infos contact).
      */
     private function canTouchUserInCurrentSchool(User $target): bool
     {
@@ -97,9 +97,20 @@ class UserController extends Controller
 
         $schoolId = currentSchoolId();
         if ($schoolId === null) return false;
+        if (!$this->userBelongsToSchool($target->id, $schoolId)) return false;
 
-        if (!$this->userBelongsToSchool($caller->id, $schoolId)) return false;
-        return $this->userBelongsToSchool($target->id, $schoolId);
+        if ($this->callerHasSchoolRole($schoolId, ['director', 'admin', 'registar'])) {
+            return true;
+        }
+
+        $callerFamilyIds = UserRole::where('user_id', $caller->id)
+            ->where('roleable_type', 'family')
+            ->pluck('roleable_id');
+
+        return $callerFamilyIds->isNotEmpty() && UserRole::where('user_id', $target->id)
+            ->where('roleable_type', 'family')
+            ->whereIn('roleable_id', $callerFamilyIds)
+            ->exists();
     }
 
     private function userBelongsToSchool(int $userId, int $schoolId): bool

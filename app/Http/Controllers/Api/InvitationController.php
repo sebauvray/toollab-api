@@ -51,7 +51,7 @@ class InvitationController extends Controller
     public function setPassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
             'token' => 'required',
             'password' => 'required|min:8|confirmed',
         ]);
@@ -68,13 +68,14 @@ class InvitationController extends Controller
             ->where('expires_at', '>', now())
             ->first();
 
-        if (!$token) {
+        $user = User::where('email', $request->email)->first();
+
+        if (!$token || !$user) {
             return response()->json([
                 'message' => 'Le lien d\'invitation est invalide ou a expiré'
             ], 404);
         }
 
-        $user = User::where('email', $request->email)->first();
         $user->password = Hash::make($request->password);
         $user->save();
 

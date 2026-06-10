@@ -185,6 +185,11 @@ class SchoolController extends Controller
      */
     public function update(UpdateSchoolRequest $request, School $school)
     {
+        $user = auth()->user();
+        if (!$user->is_super_admin && $school->id !== currentSchoolId()) {
+            return response()->json(['message' => 'Accès refusé'], 403);
+        }
+
         $validatedData = $request->validated();
 
         if ($request->hasFile('logo')) {

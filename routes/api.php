@@ -98,7 +98,6 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                 Route::get('/', [FamilyController::class, 'index']);
                 Route::post('/', [FamilyController::class, 'store']);
                 Route::get('/{family}', [FamilyController::class, 'show']);
-                Route::put('/{family}', [FamilyController::class, 'update']);
                 Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
                 Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
                 Route::put('/{family}/students/{student}', [FamilyController::class, 'updateStudent']);
@@ -119,10 +118,12 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
             Route::prefix('classrooms')->group(function () {
                 Route::get('/', [ClassroomController::class, 'index']);
-                Route::post('/', [ClassroomController::class, 'store']);
                 Route::get('/{classroom}', [ClassroomController::class, 'show']);
-                Route::put('/{classroom}', [ClassroomController::class, 'update']);
-                Route::delete('/{id}', [ClassroomController::class, 'destroy']);
+                Route::middleware('checkrole:director,admin')->group(function () {
+                    Route::post('/', [ClassroomController::class, 'store']);
+                    Route::put('/{classroom}', [ClassroomController::class, 'update']);
+                    Route::delete('/{id}', [ClassroomController::class, 'destroy']);
+                });
             });
 
             Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
@@ -146,8 +147,10 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                 Route::get('/schedules', [ScheduleController::class, 'mySchedules']);
             });
 
-            Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
-            Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
+            Route::middleware('checkrole:director,admin,registar')->group(function () {
+                Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
+                Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
+            });
 
             Route::prefix('tarification')->middleware('checkrole:director,admin')->group(function () {
                 Route::get('/cursus', [TarificationController::class, 'index']);
@@ -163,9 +166,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
             Route::prefix('families/{family}/paiements')->group(function () {
                 Route::get('/', [App\Http\Controllers\Api\PaiementController::class, 'show']);
-                Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
-                Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
-                Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
+                Route::middleware('checkrole:director,admin,registar')->group(function () {
+                    Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
+                    Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
+                    Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
+                });
             });
 
             Route::prefix('statistics')->middleware('checkrole:admin,director')->group(function () {

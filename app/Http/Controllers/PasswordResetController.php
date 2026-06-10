@@ -16,9 +16,9 @@ class PasswordResetController extends Controller
     {
         $request->validate(['email' => 'required|email']);
 
-        $status = Password::sendResetLink($request->only('email'));
+        Password::sendResetLink($request->only('email'));
 
-        return $this->sendResponse($status, 'Un lien de réinitialisation du mot de passe a été envoyé à votre adresse email.', 'Une erreur est survenue lors de l\'envoi du lien de réinitialisation.');
+        return response()->json(['message' => 'Si un compte existe pour cette adresse, un lien de réinitialisation du mot de passe lui a été envoyé.']);
     }
 
     public function resetPassword(Request $request)
