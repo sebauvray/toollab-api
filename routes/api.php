@@ -166,6 +166,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
             Route::prefix('families/{family}/paiements')->group(function () {
                 Route::get('/', [App\Http\Controllers\Api\PaiementController::class, 'show']);
+                Route::get('/facture', [App\Http\Controllers\Api\PaiementController::class, 'facture']);
                 Route::middleware('checkrole:director,admin,registar')->group(function () {
                     Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
                     Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);

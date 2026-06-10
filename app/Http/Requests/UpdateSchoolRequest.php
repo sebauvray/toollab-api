@@ -23,6 +23,9 @@ class UpdateSchoolRequest extends FormRequest
             'country' => 'nullable|string|max:255',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'access' => 'sometimes|required|boolean',
+            'siret' => 'nullable|string|max:30',
+            'vat_mode' => 'nullable|in:association,enseignement,franchise,assujetti',
+            'vat_number' => 'nullable|string|max:30',
         ];
     }
 
@@ -57,6 +60,10 @@ class UpdateSchoolRequest extends FormRequest
 
             'access.required' => 'Le statut d\'accès est obligatoire.',
             'access.boolean' => 'Le statut d\'accès doit être vrai ou faux.',
+
+            'siret.max' => 'Le SIRET ne peut pas dépasser 30 caractères.',
+            'vat_mode.in' => 'Le régime de TVA sélectionné est invalide.',
+            'vat_number.max' => 'Le numéro de TVA ne peut pas dépasser 30 caractères.',
         ];
     }
 }

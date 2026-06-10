@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class School extends Model
 {
@@ -21,6 +20,9 @@ class School extends Model
         'country',
         'logo',
         'access',
+        'siret',
+        'vat_mode',
+        'vat_number',
     ];
 
     public function userRoles()
