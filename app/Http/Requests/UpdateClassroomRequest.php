@@ -27,6 +27,11 @@ class UpdateClassroomRequest extends FormRequest
             })],
             'gender' => 'required|in:Hommes,Femmes,Enfants,Mixte',
             'telegram_link' => 'nullable|string|max:500',
+            'main_teacher_id' => ['nullable', 'integer', Rule::exists('user_roles', 'user_id')->where(function ($q) use ($schoolId) {
+                $q->where('roleable_type', 'school')
+                    ->where('roleable_id', $schoolId)
+                    ->whereIn('role_id', \App\Models\Role::query()->where('slug', 'teacher')->pluck('id'));
+            })],
             'schedules' => 'nullable|array',
             'schedules.*.id' => 'nullable|exists:class_schedules,id',
             'schedules.*.day' => 'required_with:schedules.*|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',

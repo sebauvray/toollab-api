@@ -74,11 +74,14 @@ class TeacherController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function (Classroom $c) {
+                $mainTeacherId = $c->main_teacher_id
+                    ?? $c->schedules()->whereNotNull('teacher_id')->orderBy('id')->value('teacher_id');
                 return [
                     'id' => $c->id,
                     'name' => $c->name,
                     'gender' => $c->gender,
                     'size' => $c->size,
+                    'is_main_teacher' => $mainTeacherId === auth()->id(),
                     'student_count' => $c->student_count,
                     'cursus' => $c->cursus?->name,
                     'level' => $c->level?->name,
@@ -151,6 +154,7 @@ class TeacherController extends Controller
                     'gender' => $classroom->gender,
                 ],
                 'outcomes_open' => $year ? (bool) $year->outcomes_open : false,
+                'is_main_teacher' => $classroom->effectiveMainTeacherId() === auth()->id(),
                 'year_closed' => $year ? !$year->isOpen() : true,
                 'schedules' => $schedules,
                 'students' => $students,
@@ -162,6 +166,10 @@ class TeacherController extends Controller
     {
         if ($resp = $this->guardClassroom($classroom)) {
             return $resp;
+        }
+
+        if ($classroom->effectiveMainTeacherId() !== auth()->id()) {
+            return response()->json(['message' => 'Accès refusé'], 403);
         }
 
         $yearId = currentSchoolYearId();

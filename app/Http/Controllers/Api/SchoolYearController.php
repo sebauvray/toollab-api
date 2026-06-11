@@ -288,6 +288,7 @@ class SchoolYearController extends Controller
             ]);
             $new->school_id = $classroom->school_id;
             $new->school_year_id = $activeYear->id;
+            $new->main_teacher_id = $classroom->effectiveMainTeacherId();
             $new->save();
 
             foreach ($classroom->schedules as $schedule) {
@@ -297,6 +298,7 @@ class SchoolYearController extends Controller
                     'start_time' => $schedule->start_time,
                     'end_time' => $schedule->end_time,
                     'teacher_name' => $schedule->teacher_name,
+                    'teacher_id' => $schedule->teacher_id,
                 ]);
             }
 

@@ -57,6 +57,24 @@ class Classroom extends Model
         return $this->hasMany(ClassSchedule::class);
     }
 
+    public function mainTeacher()
+    {
+        return $this->belongsTo(User::class, 'main_teacher_id');
+    }
+
+    public function effectiveMainTeacherId(): ?int
+    {
+        if ($this->main_teacher_id) {
+            return $this->main_teacher_id;
+        }
+
+        if ($this->relationLoaded('schedules')) {
+            return $this->schedules->sortBy('id')->firstWhere('teacher_id', '!=', null)?->teacher_id;
+        }
+
+        return $this->schedules()->whereNotNull('teacher_id')->orderBy('id')->value('teacher_id');
+    }
+
     public function getStudentCountAttribute()
     {
         return $this->activeStudents()->count();

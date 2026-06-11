@@ -40,6 +40,7 @@ class ClassroomController extends Controller
                 'student_count' => $classroom->student_count,
                 'available_spots' => $classroom->available_spots,
                 'telegram_link' => $classroom->telegram_link,
+                'main_teacher_id' => $classroom->effectiveMainTeacherId(),
                 'schedules' => $classroom->schedules->map(function ($schedule) {
                     return [
                         'id' => $schedule->id,
@@ -85,6 +86,9 @@ class ClassroomController extends Controller
                     'id' => $classroom->id,
                     'name' => $classroom->name,
                     'cursus' => $classroom->cursus?->name ?? 'N/A',
+                    'cursus_id' => $classroom->cursus_id,
+                    'type' => $classroom->type,
+                    'years' => $classroom->years,
                     'level' => $classroom->level,
                     'level_id' => $classroom->level_id,
                     'gender' => $classroom->gender,
@@ -92,6 +96,7 @@ class ClassroomController extends Controller
                     'student_count' => $classroom->student_count,
                     'available_spots' => $classroom->available_spots,
                     'telegram_link' => $classroom->telegram_link,
+                    'main_teacher_id' => $classroom->effectiveMainTeacherId(),
                     'schedules' => $classroom->schedules->map(function ($schedule) {
                         return [
                             'id' => $schedule->id,
@@ -117,6 +122,29 @@ class ClassroomController extends Controller
                 'message' => 'Classe non trouvée',
                 'error' => 'Une erreur est survenue'
             ], 404);
+        }
+    }
+
+    private function syncMainTeacher(Classroom $classroom, $requestedId): void
+    {
+        $teacherIds = $classroom->schedules()
+            ->whereNotNull('teacher_id')
+            ->orderBy('id')
+            ->pluck('teacher_id')
+            ->unique()
+            ->values();
+
+        $requestedId = $requestedId ? (int) $requestedId : null;
+
+        $main = match (true) {
+            $requestedId && $teacherIds->contains($requestedId) => $requestedId,
+            $classroom->main_teacher_id && $teacherIds->contains($classroom->main_teacher_id) => $classroom->main_teacher_id,
+            default => $teacherIds->first(),
+        };
+
+        if ($classroom->main_teacher_id !== $main) {
+            $classroom->main_teacher_id = $main;
+            $classroom->save();
         }
     }
 
@@ -147,6 +175,8 @@ class ClassroomController extends Controller
                     ]);
                 }
             }
+
+            $this->syncMainTeacher($classroom, $request->input('main_teacher_id'));
 
             DB::commit();
 
@@ -236,6 +266,8 @@ class ClassroomController extends Controller
                         ->delete();
                 }
             }
+
+            $this->syncMainTeacher($classroom, $request->input('main_teacher_id'));
 
             DB::commit();
 
