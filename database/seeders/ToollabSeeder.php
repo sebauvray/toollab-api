@@ -19,6 +19,7 @@ use App\Models\Paiement;
 use App\Models\LignePaiement;
 use App\Models\UserInfo;
 use App\Models\ReductionFamiliale;
+use App\Models\ReductionMultiCursus;
 use Illuminate\Support\Facades\Hash;
 use Faker\Factory as Faker;
 use Carbon\Carbon;
@@ -28,13 +29,21 @@ class ToollabSeeder extends Seeder
     private $faker;
     private $school;
     private $schoolYear;
-    private $cursus;
-    private $levels;
-    private $classrooms = [];
+    private $cursusArabe;
+    private $cursusCoran;
+    private $levelsArabe;
+    private $classrooms = ['arabe' => [], 'coran' => []];
+    private $classroomCounts = [];
     private $families = [];
     private $students = [];
     private $responsibles = [];
     private $teachers = [];
+    private $enrollmentPlan = [];
+
+    private const BANQUES = [
+        'BNP Paribas', 'Crédit Agricole', 'Société Générale', 'LCL',
+        'La Banque Postale', 'Caisse d\'Épargne', 'Crédit Mutuel', 'Boursorama Banque',
+    ];
 
     public function __construct()
     {
@@ -44,9 +53,8 @@ class ToollabSeeder extends Seeder
     public function run(): void
     {
         $this->createSchoolAndDirector();
-        $this->createCursusWithTarifs();
-        $this->createFamilyReductions();
-        $this->createArabicClasses();
+        $this->createCursusEtTarification();
+        $this->createClasses();
         $this->createTeachersAndSchedules();
         $this->createFamilies();
         $this->createStudents();
@@ -112,74 +120,104 @@ class ToollabSeeder extends Seeder
         request()->attributes->set('current_school_year_id', $this->schoolYear->id);
     }
 
-    private function createCursusWithTarifs(): void
+    private function createCursusEtTarification(): void
     {
-        $this->cursus = Cursus::create([
-            'name' => 'Cursus Langue Arabe',
+        $director = User::where('email', 'relhanti@gmail.com')->first();
+
+        $this->cursusArabe = Cursus::create([
+            'name' => 'Arabe',
             'progression' => 'levels',
             'school_id' => $this->school->id,
         ]);
 
-        $this->levels = collect();
-        for ($i = 1; $i <= 5; $i++) {
-            $level = CursusLevel::create([
-                'cursus_id' => $this->cursus->id,
-                'name' => "Niveau $i",
-                'order' => $i,
-            ]);
-            $this->levels->push($level);
+        $this->levelsArabe = collect();
+        $levelNames = ['1ère année', '2ème année', '3ème année', '4ème année', '5ème année'];
+        foreach ($levelNames as $i => $name) {
+            $this->levelsArabe->push(CursusLevel::create([
+                'cursus_id' => $this->cursusArabe->id,
+                'name' => $name,
+                'order' => $i + 1,
+            ]));
         }
 
         Tarif::create([
-            'cursus_id' => $this->cursus->id,
+            'cursus_id' => $this->cursusArabe->id,
             'prix' => 270,
             'actif' => true,
         ]);
-    }
 
-    private function createFamilyReductions(): void
-    {
-        $director = User::where('email', 'relhanti@gmail.com')->first();
-        
+        // 270 € → 240 € dès 3 élèves (−11,11 %) → 210 € dès 5 élèves (−22,22 %)
         ReductionFamiliale::create([
-            'cursus_id' => $this->cursus->id,
+            'cursus_id' => $this->cursusArabe->id,
             'nombre_eleves_min' => 3,
             'pourcentage_reduction' => 11.11,
             'actif' => true,
             'created_by' => $director->id,
         ]);
-
         ReductionFamiliale::create([
-            'cursus_id' => $this->cursus->id,
+            'cursus_id' => $this->cursusArabe->id,
             'nombre_eleves_min' => 5,
             'pourcentage_reduction' => 22.22,
             'actif' => true,
             'created_by' => $director->id,
         ]);
+
+        $this->cursusCoran = Cursus::create([
+            'name' => 'Coran',
+            'progression' => 'continu',
+            'school_id' => $this->school->id,
+        ]);
+
+        Tarif::create([
+            'cursus_id' => $this->cursusCoran->id,
+            'prix' => 150,
+            'actif' => true,
+        ]);
+
+        ReductionMultiCursus::create([
+            'cursus_beneficiaire_id' => $this->cursusCoran->id,
+            'cursus_requis_id' => $this->cursusArabe->id,
+            'pourcentage_reduction' => 50,
+            'actif' => true,
+            'created_by' => $director->id,
+        ]);
     }
 
-    private function createArabicClasses(): void
+    private function createClasses(): void
     {
-        $classTypes = ['Enfants', 'Femmes', 'Hommes'];
-        $classSizes = [15, 20, 25, 30];
+        $genders = ['Enfants', 'Femmes', 'Hommes'];
+        $shortLevels = ['1ère', '2ème', '3ème', '4ème', '5ème'];
 
-        for ($i = 1; $i <= 20; $i++) {
-            $level = $this->levels->random();
-            $type = $this->faker->randomElement($classTypes);
-            $size = $this->faker->randomElement($classSizes);
-            
+        foreach ($this->levelsArabe as $i => $level) {
+            foreach (['A', 'B', 'C'] as $j => $letter) {
+                $classroom = Classroom::create([
+                    'school_id' => $this->school->id,
+                    'name' => $shortLevels[$i] . ' ' . $letter,
+                    'years' => date('Y'),
+                    'type' => 'Arabe',
+                    'size' => $this->faker->randomElement([15, 20, 25]),
+                    'cursus_id' => $this->cursusArabe->id,
+                    'level_id' => $level->id,
+                    'gender' => $genders[$j],
+                ]);
+                $this->classrooms['arabe'][] = $classroom;
+                $this->classroomCounts[$classroom->id] = 0;
+            }
+        }
+
+        foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $j => $letter) {
             $classroom = Classroom::create([
                 'school_id' => $this->school->id,
-                'name' => "Classe Arabe {$level->name} - {$type} {$i}",
+                'name' => 'Coran ' . $letter,
                 'years' => date('Y'),
-                'type' => $type,
-                'size' => $size,
-                'cursus_id' => $this->cursus->id,
-                'level_id' => $level->id,
-                'gender' => $type,
+                'type' => 'Coran',
+                'size' => $this->faker->randomElement([15, 20, 25]),
+                'cursus_id' => $this->cursusCoran->id,
+                'level_id' => null,
+                'gender' => $genders[$j % 3],
             ]);
-            
-            $this->classrooms[] = $classroom;
+            $this->classrooms['coran'][] = $classroom;
+            $this->classroomCounts[$classroom->id] = 0;
         }
     }
 
@@ -225,15 +263,16 @@ class ToollabSeeder extends Seeder
             ['09:00', '11:00'],
             ['10:00', '12:00'],
             ['11:00', '13:00'],
-            ['13:30', '15:30'],
             ['14:00', '16:00'],
             ['15:30', '17:30'],
             ['17:00', '19:00'],
         ];
 
-        foreach ($this->classrooms as $classroom) {
-            $nbSchedules = $this->faker->numberBetween(1, 3);
+        $allClassrooms = array_merge($this->classrooms['arabe'], $this->classrooms['coran']);
+        foreach ($allClassrooms as $classroom) {
+            $nbSchedules = $this->faker->numberBetween(1, 2);
             $usedKeys = [];
+            $mainTeacherId = null;
 
             for ($i = 0; $i < $nbSchedules; $i++) {
                 $attempt = 0;
@@ -248,6 +287,7 @@ class ToollabSeeder extends Seeder
                 $usedKeys[] = $key;
 
                 $teacher = $this->faker->randomElement($this->teachers);
+                $mainTeacherId ??= $teacher->id;
 
                 ClassSchedule::create([
                     'classroom_id' => $classroom->id,
@@ -256,6 +296,11 @@ class ToollabSeeder extends Seeder
                     'start_time' => $slot[0],
                     'end_time' => $slot[1],
                 ]);
+            }
+
+            if ($mainTeacherId) {
+                $classroom->main_teacher_id = $mainTeacherId;
+                $classroom->save();
             }
         }
     }
@@ -276,14 +321,14 @@ class ToollabSeeder extends Seeder
             } else {
                 $responsible1 = $this->createResponsible('female');
                 $responsible2 = $this->createResponsible('male', $responsible1->last_name);
-                
+
                 UserRole::create([
                     'user_id' => $responsible2->id,
                     'role_id' => $responsibleRole->id,
                     'roleable_type' => 'family',
                     'roleable_id' => $family->id,
                 ]);
-                
+
                 $responsible = $responsible1;
             }
 
@@ -304,12 +349,12 @@ class ToollabSeeder extends Seeder
 
     private function createResponsible($gender, $lastName = null): User
     {
-        $firstName = $gender === 'female' 
-            ? $this->faker->firstNameFemale 
+        $firstName = $gender === 'female'
+            ? $this->faker->firstNameFemale
             : $this->faker->firstNameMale;
-        
+
         $lastName = $lastName ?: $this->faker->lastName;
-        
+
         $user = User::create([
             'first_name' => $firstName,
             'last_name' => $lastName,
@@ -356,10 +401,10 @@ class ToollabSeeder extends Seeder
             '78' => ['Versailles', 'Sartrouville', 'Mantes-la-Jolie', 'Saint-Germain-en-Laye'],
             '91' => ['Évry', 'Corbeil-Essonnes', 'Massy', 'Savigny-sur-Orge'],
         ];
-        
+
         $dept = substr($zipcode, 0, 2);
         $city = is_array($cities[$dept]) ? $this->faker->randomElement($cities[$dept]) : $cities[$dept];
-        
+
         UserInfo::create([
             'user_id' => $user->id,
             'key' => 'city',
@@ -370,16 +415,15 @@ class ToollabSeeder extends Seeder
     private function createStudents(): void
     {
         $studentRole = Role::where('slug', 'student')->first();
-        $totalStudents = 0;
-        
+
         $studentDistribution = $this->generateStudentDistribution();
 
         foreach ($this->families as $familyId => &$familyData) {
             $numberOfStudents = array_shift($studentDistribution);
-            
+
             for ($i = 0; $i < $numberOfStudents; $i++) {
                 $isChild = $this->faker->boolean(70);
-                
+
                 $student = User::create([
                     'first_name' => $this->faker->firstName,
                     'last_name' => $familyData['responsible']->last_name,
@@ -387,7 +431,7 @@ class ToollabSeeder extends Seeder
                     'password' => Hash::make('password'),
                     'access' => 1,
                 ]);
-                
+
                 $student->is_child = $isChild;
 
                 UserRole::create([
@@ -397,10 +441,10 @@ class ToollabSeeder extends Seeder
                     'roleable_id' => $familyId,
                 ]);
 
-                $birthdate = $isChild 
+                $birthdate = $isChild
                     ? $this->faker->dateTimeBetween('-15 years', '-6 years')
                     : $this->faker->dateTimeBetween('-30 years', '-16 years');
-                
+
                 UserInfo::create([
                     'user_id' => $student->id,
                     'key' => 'birthdate',
@@ -413,200 +457,249 @@ class ToollabSeeder extends Seeder
                     'key' => 'gender',
                     'value' => $gender,
                 ]);
-                
+
                 $student->gender = $gender;
 
                 $familyData['students'][] = $student;
                 $this->students[] = $student;
-                $totalStudents++;
             }
         }
     }
 
     private function generateStudentDistribution(): array
     {
-        $distribution = [];
-        
-        for ($i = 0; $i < 5; $i++) $distribution[] = 1;
-        for ($i = 0; $i < 10; $i++) $distribution[] = 2;
-        for ($i = 0; $i < 10; $i++) $distribution[] = 3;
-        for ($i = 0; $i < 10; $i++) $distribution[] = 4;
-        for ($i = 0; $i < 10; $i++) $distribution[] = 5;
-        for ($i = 0; $i < 10; $i++) $distribution[] = 6;
-        for ($i = 0; $i < 3; $i++) $distribution[] = 7;
-        for ($i = 0; $i < 2; $i++) $distribution[] = 8;
-        
+        $distribution = array_merge(
+            array_fill(0, 8, 1),
+            array_fill(0, 14, 2),
+            array_fill(0, 14, 3),
+            array_fill(0, 12, 4),
+            array_fill(0, 8, 5),
+            array_fill(0, 4, 6),
+        );
+
         shuffle($distribution);
         return $distribution;
     }
 
+    /**
+     * Profils famille : 15 % aucun inscrit, 25 % partiellement inscrits, 60 % tous inscrits.
+     * Par élève inscrit : 75 % Arabe seul, 20 % Coran seul, 5 % les deux. Jamais plus de 2 cursus.
+     */
     private function enrollStudentsInClasses(): void
     {
-        $classroomFillRates = $this->generateClassroomFillRates();
+        foreach ($this->families as $familyId => $familyData) {
+            $profile = $this->faker->randomElement(array_merge(
+                array_fill(0, 3, 'none'),
+                array_fill(0, 5, 'partial'),
+                array_fill(0, 12, 'all'),
+            ));
 
-        $byGender = ['Femmes' => [], 'Hommes' => [], 'Enfants' => []];
-        $familyByStudent = [];
-        foreach ($this->students as $student) {
-            if ($student->is_child) {
-                $byGender['Enfants'][] = $student;
-            } elseif ($student->gender === 'F') {
-                $byGender['Femmes'][] = $student;
-            } elseif ($student->gender === 'M') {
-                $byGender['Hommes'][] = $student;
+            $plan = ['arabe' => 0, 'coran_only' => 0, 'both' => 0];
+
+            foreach ($familyData['students'] as $student) {
+                $enroll = match ($profile) {
+                    'none' => false,
+                    'partial' => $this->faker->boolean(55),
+                    default => true,
+                };
+                if (!$enroll) continue;
+
+                $roll = $this->faker->numberBetween(1, 100);
+                $wantsArabe = $roll <= 80;
+                $wantsCoran = $roll > 75;
+
+                $inArabe = $wantsArabe && $this->enrollInCursus($student, $familyId, 'arabe');
+                $inCoran = $wantsCoran && $this->enrollInCursus($student, $familyId, 'coran');
+
+                if ($inArabe && $inCoran) {
+                    $plan['both']++;
+                    $plan['arabe']++;
+                } elseif ($inArabe) {
+                    $plan['arabe']++;
+                } elseif ($inCoran) {
+                    $plan['coran_only']++;
+                }
             }
-        }
-        foreach ($this->families as $fId => $fData) {
-            foreach ($fData['students'] as $s) {
-                $familyByStudent[$s->id] = $fId;
-            }
-        }
 
-        foreach ($this->classrooms as $index => $classroom) {
-            $fillRate = $classroomFillRates[$index];
-            $target = (int) ($classroom->size * $fillRate);
-            if ($target <= 0) continue;
-
-            $pool = $byGender[$classroom->gender] ?? [];
-            if (empty($pool)) continue;
-
-            shuffle($pool);
-            $enrolled = 0;
-            foreach ($pool as $student) {
-                if ($enrolled >= $target) break;
-                $familyId = $familyByStudent[$student->id] ?? null;
-                if (!$familyId) continue;
-
-                $exists = StudentClassroom::where('student_id', $student->id)
-                    ->where('classroom_id', $classroom->id)
-                    ->exists();
-                if ($exists) continue;
-
-                StudentClassroom::create([
-                    'student_id' => $student->id,
-                    'classroom_id' => $classroom->id,
-                    'family_id' => $familyId,
-                    'status' => 'active',
-                    'enrollment_date' => Carbon::now()->subDays(rand(1, 30)),
-                ]);
-                $enrolled++;
-            }
+            $this->enrollmentPlan[$familyId] = $plan;
         }
     }
 
-    private function generateClassroomFillRates(): array
+    private function enrollInCursus(User $student, int $familyId, string $cursusKey): bool
     {
-        $rates = [];
-        
-        for ($i = 0; $i < 3; $i++) {
-            $rates[] = 1.0;
-        }
-        
-        for ($i = 0; $i < 5; $i++) {
-            $rates[] = $this->faker->randomFloat(2, 0.85, 0.95);
-        }
-        
-        for ($i = 0; $i < 7; $i++) {
-            $rates[] = $this->faker->randomFloat(2, 0.5, 0.8);
-        }
-        
-        for ($i = 0; $i < 5; $i++) {
-            $rates[] = $this->faker->randomFloat(2, 0.2, 0.4);
-        }
-        
-        shuffle($rates);
-        return $rates;
+        $gender = $student->is_child ? 'Enfants' : ($student->gender === 'F' ? 'Femmes' : 'Hommes');
+
+        $candidates = array_filter(
+            $this->classrooms[$cursusKey],
+            fn ($c) => $c->gender === $gender && $this->classroomCounts[$c->id] < $c->size
+        );
+        if (empty($candidates)) return false;
+
+        $classroom = $this->faker->randomElement(array_values($candidates));
+
+        StudentClassroom::create([
+            'student_id' => $student->id,
+            'classroom_id' => $classroom->id,
+            'family_id' => $familyId,
+            'status' => 'active',
+            'enrollment_date' => Carbon::now()->subDays(rand(1, 45)),
+        ]);
+        $this->classroomCounts[$classroom->id]++;
+
+        return true;
     }
 
+    /**
+     * Total famille fidèle au TarifCalculatorService :
+     * Arabe = 270 € / élève, 240 € dès 3 élèves Arabe, 210 € dès 5.
+     * Coran = 150 € / élève, 75 € si l'élève suit aussi l'Arabe (réduction multi-cursus 50 %, exclusive).
+     */
+    private function computeFamilyTotal(array $plan): int
+    {
+        $nArabe = $plan['arabe'];
+        $prixArabe = $nArabe >= 5 ? 210 : ($nArabe >= 3 ? 240 : 270);
+
+        return $prixArabe * $nArabe
+            + 150 * $plan['coran_only']
+            + 75 * $plan['both'];
+    }
+
+    /**
+     * Scénarios : 25 % rien payé, 35 % payé en totalité, 30 % paiement partiel,
+     * 10 % exonération (totale ou partielle). Jamais de dépassement du total dû.
+     */
     private function createPayments(): void
     {
         $director = User::where('email', 'relhanti@gmail.com')->first();
-        
-        foreach ($this->families as $familyData) {
-            $family = $familyData['family'];
-            
-            // Count only enrolled students
-            $enrolledStudents = StudentClassroom::where('family_id', $family->id)
-                ->where('status', 'active')
-                ->count();
-            
-            if ($enrolledStudents === 0) continue;
-            
-            $basePrice = 270;
-            $totalAmount = $this->calculatePriceWithReduction($basePrice, $enrolledStudents);
-            
-            // Determine if this family pays or not
-            $shouldPay = $this->faker->randomElement([true, true, true, true, false]); // 80% pay
-            
-            if (!$shouldPay) continue;
-            
+
+        foreach ($this->families as $familyId => $familyData) {
+            $plan = $this->enrollmentPlan[$familyId] ?? null;
+            if (!$plan) continue;
+
+            $total = $this->computeFamilyTotal($plan);
+            if ($total <= 0) continue;
+
+            $scenario = $this->faker->randomElement(array_merge(
+                array_fill(0, 25, 'unpaid'),
+                array_fill(0, 35, 'full'),
+                array_fill(0, 30, 'partial'),
+                array_fill(0, 10, 'exoneration'),
+            ));
+
+            if ($scenario === 'unpaid') continue;
+
             $paiement = Paiement::create([
-                'family_id' => $family->id,
+                'family_id' => $familyId,
                 'created_by' => $director->id,
             ]);
-            
-            // Some families get exonerations
-            $hasExoneration = $this->faker->randomElement([false, false, false, false, false, false, false, false, false, true]); // 10% exoneration
-            
-            if ($hasExoneration) {
+
+            $responsible = $familyData['responsible'];
+
+            if ($scenario === 'exoneration') {
+                $exoTotale = $this->faker->boolean(50);
+                $montantExo = $exoTotale ? $total : (int) round($total / 2);
+
                 LignePaiement::create([
                     'paiement_id' => $paiement->id,
                     'type_paiement' => 'exoneration',
-                    'montant' => $totalAmount,
+                    'montant' => $montantExo,
                     'details' => [
-                        'motif' => $this->faker->randomElement(['Situation sociale', 'Bourse', 'Personnel institut']),
+                        'justification' => $this->faker->randomElement([
+                            'Situation sociale difficile',
+                            'Famille du personnel de l\'institut',
+                            'Prise en charge association partenaire',
+                        ]),
                     ],
                     'created_by' => $director->id,
                 ]);
-            } else {
-                // Partial payment
-                $paymentPercentage = $this->faker->randomElement([1, 1, 1, 0.5, 0.75]); // Most pay full, some partial
-                $amountToPay = round($totalAmount * $paymentPercentage, 2);
-                $remainingAmount = $amountToPay;
-                $paymentCount = $this->faker->randomElement([1, 2, 3]);
-                
-                for ($i = 0; $i < $paymentCount; $i++) {
-                    $isLastPayment = ($i === $paymentCount - 1);
-                    $amount = $isLastPayment ? $remainingAmount : round($amountToPay / $paymentCount, 2);
-                    
-                    $paymentMethod = $this->faker->randomElement([
-                        'cheque', 'cheque', 'cheque', 'cheque', 'cheque', 'cheque',
-                        'espece', 'espece', 'espece',
-                        'carte'
-                    ]);
-                    
-                    $details = null;
-                    if ($paymentMethod === 'cheque') {
-                        $responsible = $familyData['responsible'];
-                        $details = [
-                            'numero' => (string)rand(1000000, 9999999),
-                            'banque' => $this->faker->randomElement(['BNP Paribas', 'Crédit Agricole', 'Société Générale', 'LCL']),
-                            'date' => Carbon::now()->subDays(rand(1, 30))->format('Y-m-d'),
-                            'emetteur' => $responsible->first_name . ' ' . $responsible->last_name,
-                        ];
-                    }
-                    
-                    LignePaiement::create([
-                        'paiement_id' => $paiement->id,
-                        'type_paiement' => $paymentMethod,
-                        'montant' => $amount,
-                        'details' => $details,
-                        'created_by' => $director->id,
-                    ]);
-                    
-                    $remainingAmount -= $amount;
+
+                if (!$exoTotale && $this->faker->boolean(70)) {
+                    $this->createPaymentLines($paiement, $total - $montantExo, $responsible, $director);
                 }
+                continue;
             }
+
+            $aPayer = $scenario === 'full'
+                ? $total
+                : (int) round($total * $this->faker->randomElement([0.3, 0.4, 0.5, 0.6, 0.75]));
+
+            if ($aPayer <= 0) continue;
+
+            $this->createPaymentLines($paiement, $aPayer, $responsible, $director);
         }
     }
 
-    private function calculatePriceWithReduction($basePrice, $numberOfChildren): float
+    /**
+     * Répartit un montant en lignes cohérentes : chèques (1 à 3, infos complètes au
+     * format API {banque, numero, nom_emetteur}), CB seule, espèces seules, ou mix.
+     */
+    private function createPaymentLines(Paiement $paiement, int $montant, User $responsible, User $director): void
     {
-        if ($numberOfChildren >= 5) {
-            return 210 * $numberOfChildren;
-        } elseif ($numberOfChildren >= 3) {
-            return 240 * $numberOfChildren;
-        } else {
-            return 270 * $numberOfChildren;
+        $mode = $this->faker->randomElement([
+            'cheques3', 'cheques3', 'cheque1', 'cheque1', 'cheque1',
+            'carte', 'carte', 'espece', 'espece',
+            'mix_espece_cheque', 'mix_carte_espece',
+        ]);
+
+        $lignes = [];
+
+        switch ($mode) {
+            case 'cheques3':
+                $n = min(3, max(2, intdiv($montant, 100) ?: 2));
+                $part = intdiv($montant, $n);
+                for ($i = 0; $i < $n; $i++) {
+                    $m = $i === $n - 1 ? $montant - $part * ($n - 1) : $part;
+                    $lignes[] = ['type' => 'cheque', 'montant' => $m];
+                }
+                break;
+            case 'cheque1':
+                $lignes[] = ['type' => 'cheque', 'montant' => $montant];
+                break;
+            case 'carte':
+                $lignes[] = ['type' => 'carte', 'montant' => $montant];
+                break;
+            case 'espece':
+                $lignes[] = ['type' => 'espece', 'montant' => $montant];
+                break;
+            case 'mix_espece_cheque':
+                $part = (int) round($montant * 0.4);
+                if ($part > 0 && $montant - $part > 0) {
+                    $lignes[] = ['type' => 'espece', 'montant' => $part];
+                    $lignes[] = ['type' => 'cheque', 'montant' => $montant - $part];
+                } else {
+                    $lignes[] = ['type' => 'espece', 'montant' => $montant];
+                }
+                break;
+            case 'mix_carte_espece':
+                $part = (int) round($montant * 0.6);
+                if ($part > 0 && $montant - $part > 0) {
+                    $lignes[] = ['type' => 'carte', 'montant' => $part];
+                    $lignes[] = ['type' => 'espece', 'montant' => $montant - $part];
+                } else {
+                    $lignes[] = ['type' => 'carte', 'montant' => $montant];
+                }
+                break;
+        }
+
+        $banqueFamille = $this->faker->randomElement(self::BANQUES);
+
+        foreach ($lignes as $ligne) {
+            $details = null;
+            if ($ligne['type'] === 'cheque') {
+                $details = [
+                    'banque' => $banqueFamille,
+                    'numero' => (string) $this->faker->numberBetween(1000000, 9999999),
+                    'nom_emetteur' => $responsible->first_name . ' ' . $responsible->last_name,
+                ];
+            }
+
+            LignePaiement::create([
+                'paiement_id' => $paiement->id,
+                'type_paiement' => $ligne['type'],
+                'montant' => $ligne['montant'],
+                'details' => $details,
+                'created_by' => $director->id,
+            ]);
         }
     }
 }
