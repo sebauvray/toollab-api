@@ -1,0 +1,26 @@
+.git
+.github
+node_modules
+vendor
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.idea
+.vscode
+.fleet
+.zed
+.phpunit.cache
+.phpunit.result.cache
+/public/build
+/public/hot
+/public/storage
+api
+tests
+# Fichiers compilés / périmés (régénérés au build ou au runtime)
+bootstrap/cache/*.php
+storage/logs/*.log
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*.php

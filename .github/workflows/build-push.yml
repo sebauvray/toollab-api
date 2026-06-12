@@ -1,0 +1,66 @@
+name: Build & push images
+
+# Construit les images de prod de l'API et les pousse sur GHCR, taguées avec la
+# version sémantique. Déclenché en poussant un tag git de version, ex. :
+#   git tag v1.4.0 && git push origin v1.4.0
+# Produit :
+#   ghcr.io/sebauvray/toollab-api:1.4.0        (php-fpm + workers queue)
+#   ghcr.io/sebauvray/toollab-api-nginx:1.4.0  (nginx, public/ baké)
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: ghcr.io/sebauvray/toollab-api
+            dockerfile: docker/php/Dockerfile
+          - image: ghcr.io/sebauvray/toollab-api-nginx
+            dockerfile: docker/nginx/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connexion à GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Métadonnées (tags d'image)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # Le Dockerfile php a besoin de ces ARGs (création de l'utilisateur).
+          # Le Dockerfile nginx les ignore.
+          build-args: |
+            CURRENT_USER=toollab
+            CURRENT_UID=1000
+            TZ=Europe/Paris
