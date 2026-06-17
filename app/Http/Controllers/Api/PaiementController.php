@@ -169,7 +169,7 @@ class PaiementController extends Controller
                 $paiement = $this->paiementService->getOrCreatePaiement($family, $request->user()->id);
                 $ligne = $this->paiementService->ajouterLignePaiement($paiement, $request->all());
 
-                CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
+                CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer)->afterCommit();
 
                 return response()->json([
                     'status' => 'success',
@@ -234,7 +234,7 @@ class PaiementController extends Controller
 
             $ligne = $this->paiementService->modifierLignePaiement($ligne, $request->all());
 
-            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
+            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer)->afterCommit();
 
             return response()->json([
                 'status' => 'success',
@@ -275,7 +275,7 @@ class PaiementController extends Controller
 
             $details = $this->paiementService->getDetailsPaiement($family);
 
-            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer);
+            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer)->afterCommit();
 
             return response()->json([
                 'status' => 'success',

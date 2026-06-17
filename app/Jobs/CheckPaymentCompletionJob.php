@@ -3,6 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\Family;
+use App\Models\Role;
+use App\Models\User;
 use App\Notifications\PaymentCompletedNotification;
 use App\Services\PaiementService;
 use Illuminate\Bus\Queueable;
@@ -49,10 +51,10 @@ class CheckPaymentCompletionJob implements ShouldQueue
 
             if ($details['reste_a_payer'] == 0 && $details['montant_total'] > 0) {
                 if ($this->previousResteAPayer === null || $this->previousResteAPayer > 0) {
-                    $responsables = $this->family->responsibles()->get();
+                    $responsables = $this->familyResponsibles();
 
                     foreach ($responsables as $responsable) {
-                        $responsable->notify(new PaymentCompletedNotification($this->family, $details));
+                        $responsable->notify(new PaymentCompletedNotification($this->family, $details, $activeYear?->id));
                     }
                 }
             }
@@ -60,5 +62,22 @@ class CheckPaymentCompletionJob implements ShouldQueue
             request()->attributes->set('current_school_id', $previous[0]);
             request()->attributes->set('current_school_year_id', $previous[1]);
         }
+    }
+
+    private function familyResponsibles()
+    {
+        $responsibleRoleId = Role::query()->where('slug', 'responsible')->value('id');
+
+        return User::query()
+            ->whereHas('roles', function ($query) use ($responsibleRoleId) {
+                $query->where('roleable_type', 'family')
+                    ->where('roleable_id', $this->family->id)
+                    ->when($responsibleRoleId, fn ($q) => $q->where('role_id', $responsibleRoleId));
+            })
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->unique(fn (User $user) => strtolower((string) $user->email))
+            ->values();
     }
 }

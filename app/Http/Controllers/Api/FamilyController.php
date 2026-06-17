@@ -117,6 +117,19 @@ class FamilyController extends Controller
             $query->whereIn('id', $myFamilyIds);
         }
 
+        $search = trim((string) $request->input('search', ''));
+        if ($search !== '') {
+            $query->whereHas('userRoles', function ($q) use ($search) {
+                $q->whereHas('role', fn ($roleQuery) => $roleQuery->where('slug', 'responsible'))
+                    ->whereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('first_name', 'like', '%' . $search . '%')
+                            ->orWhere('last_name', 'like', '%' . $search . '%')
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ['%' . $search . '%'])
+                            ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ['%' . $search . '%']);
+                    });
+            });
+        }
+
         $query->with(['userRoles' => function ($q) {
             $q->whereHas('role', function ($query) {
                 $query->where('slug', 'responsible');
@@ -133,14 +146,43 @@ class FamilyController extends Controller
             $q->where('status', 'active');
         }]);
 
-        $paginatedData = $this->paginateQuery($query, $request);
+        $sortBy = (string) $request->input('sort_by', 'created_at');
+        $sortDirection = strtolower((string) $request->input('sort_direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $sortableColumns = ['created_at', 'nom', 'nombreEleves', 'status'];
+        if (!in_array($sortBy, $sortableColumns, true)) {
+            $sortBy = 'created_at';
+        }
+        $paymentStatus = (string) $request->input('payment_status', 'all');
+        $allowedPaymentStatuses = ['all', 'no_enrollment', 'incomplete', 'pending', 'paid', 'exempted'];
+        if (!in_array($paymentStatus, $allowedPaymentStatuses, true)) {
+            $paymentStatus = 'all';
+        }
 
-        $formattedItems = collect($paginatedData['items'])->map(function ($family) {
+        if ($sortBy === 'nom') {
+            $responsibleNameSubquery = UserRole::query()
+                ->selectRaw("LOWER(CONCAT(users.last_name, ' ', users.first_name))")
+                ->join('roles', 'user_roles.role_id', '=', 'roles.id')
+                ->join('users', 'user_roles.user_id', '=', 'users.id')
+                ->whereColumn('user_roles.roleable_id', 'families.id')
+                ->where('user_roles.roleable_type', 'family')
+                ->where('roles.slug', 'responsible')
+                ->orderBy('users.last_name')
+                ->orderBy('users.first_name')
+                ->limit(1);
+
+            $query->orderBy($responsibleNameSubquery, $sortDirection);
+        } elseif ($sortBy === 'nombreEleves') {
+            $query->orderBy('students_count', $sortDirection);
+        } elseif ($sortBy !== 'status') {
+            $query->orderBy('created_at', $sortDirection);
+        }
+
+        $formatFamily = function ($family) {
             $responsables = $family->userRoles;
             $premier = $responsables->first(fn ($r) => $r->user);
 
             $noms = $responsables
-                ->map(fn ($r) => $r->user ? trim($r->user->first_name . ' ' . $r->user->last_name) : null)
+                ->map(fn ($r) => $r->user ? trim(mb_strtoupper($r->user->last_name) . ' ' . $r->user->first_name) : null)
                 ->filter()
                 ->values();
 
@@ -160,13 +202,54 @@ class FamilyController extends Controller
                     'city' => $userInfos[self::KEY_CITY] ?? null
                 ]
             ];
-        });
+        };
+
+        if ($sortBy === 'status' || $paymentStatus !== 'all') {
+            $items = $query->get()->map($formatFamily);
+
+            if ($paymentStatus !== 'all') {
+                $items = $items
+                    ->filter(fn ($family) => $family['status'] === $paymentStatus)
+                    ->values();
+            }
+
+            $statusOrder = [
+                'no_enrollment' => 0,
+                'exempted' => 1,
+                'incomplete' => 2,
+                'pending' => 3,
+                'paid' => 4,
+            ];
+
+            if ($sortBy === 'status') {
+                $items = $items->sortBy(
+                    fn ($family) => $statusOrder[$family['status']] ?? 99,
+                    SORT_REGULAR,
+                    $sortDirection === 'desc'
+                )->values();
+            }
+
+            $page = (int) $request->input('page', 1);
+            $perPage = min((int) $request->input('per_page', 10), 100);
+            $total = $items->count();
+            $formattedItems = $items->slice(($page - 1) * $perPage, $perPage)->values();
+            $pagination = [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => (int) ceil($total / $perPage),
+            ];
+        } else {
+            $paginatedData = $this->paginateQuery($query, $request);
+            $formattedItems = collect($paginatedData['items'])->map($formatFamily);
+            $pagination = $paginatedData['pagination'];
+        }
 
         return response()->json([
             'status' => 'success',
             'data' => [
                 'items' => $formattedItems,
-                'pagination' => $paginatedData['pagination']
+                'pagination' => $pagination
             ]
         ]);
     }
@@ -239,7 +322,7 @@ class FamilyController extends Controller
     private function calculatePaymentStatus(Family $family): string
     {
         if ($family->active_inscriptions_count == 0) {
-            return '';
+            return 'no_enrollment';
         }
 
         try {

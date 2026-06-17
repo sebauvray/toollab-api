@@ -68,8 +68,18 @@
             color: #333;
             margin-bottom: 10px;
         }
+        .class-detail {
+            color: #555;
+            font-size: 14px;
+            margin: 4px 0;
+        }
         .schedule-list {
             margin: 10px 0;
+        }
+        .teacher-list {
+            color: #555;
+            font-size: 14px;
+            margin: 6px 0 10px 0;
         }
         .schedule-item {
             color: #666;
@@ -155,7 +165,10 @@
     <div class="content">
         <p class="greeting">Bonjour {{ $notifiable->first_name }} {{ $notifiable->last_name }},</p>
 
-        <p class="greeting">Votre inscription @if($schoolName)à {{ $schoolName }} @endif a été confirmée avec succès.</p>
+        <p class="greeting">Voici le récapitulatif des inscriptions @if($schoolName)pour {{ $schoolName }}@endif.</p>
+        @if($schoolYearLabel ?? null)
+            <p class="greeting">Année scolaire : {{ $schoolYearLabel }}</p>
+        @endif
 
         <h2 class="section-title">Détail de l'inscription</h2>
 
@@ -164,30 +177,42 @@
                 <h3 class="student-name">{{ $data['student']->first_name }} {{ $data['student']->last_name }}</h3>
 
                 @foreach($data['enrollments'] as $enrollment)
+                    @php($classroom = $enrollment->classroom)
+                    @php($teachers = $classroom?->schedules?->map(fn ($schedule) => $schedule->teacher ? trim($schedule->teacher->first_name . ' ' . $schedule->teacher->last_name) : $schedule->teacher_name)->filter()->unique()->values() ?? collect())
                     <div class="class-block">
                         <div class="class-name">
-                            {{ $enrollment->classroom->name }}
-                            @if($enrollment->classroom->cursus)
-                                - {{ $enrollment->classroom->cursus->name }}
-                            @endif
+                            {{ $classroom?->name ?? 'Classe indisponible' }}
                         </div>
 
-                        @if($enrollment->classroom->schedules->count() > 0)
+                        @if($classroom?->cursus)
+                            <div class="class-detail">
+                                Cursus : {{ $classroom->cursus->name }}
+                            </div>
+                        @endif
+
+                        @if($teachers->isNotEmpty())
+                            <div class="teacher-list">
+                                Professeur{{ $teachers->count() > 1 ? 's' : '' }} : {{ $teachers->implode(', ') }}
+                            </div>
+                        @endif
+
+                        @if($classroom?->schedules?->count() > 0)
                             <div class="schedule-list">
-                                @foreach($enrollment->classroom->schedules as $schedule)
+                                @foreach($classroom->schedules as $schedule)
+                                    @php($teacherName = $schedule->teacher ? trim($schedule->teacher->first_name . ' ' . $schedule->teacher->last_name) : $schedule->teacher_name)
                                     <div class="schedule-item">
                                         {{ $schedule->day }} : {{ $schedule->start_time }} - {{ $schedule->end_time }}
-                                        @if($schedule->teacher_name)
-                                            ({{ $schedule->teacher_name }})
+                                        @if($teacherName)
+                                            ({{ $teacherName }})
                                         @endif
                                     </div>
                                 @endforeach
                             </div>
                         @endif
 
-                        @if($enrollment->classroom->telegram_link)
-                            <a href="{{ $enrollment->classroom->telegram_link }}" class="telegram-link">
-                                Groupe Telegram : {{ $enrollment->classroom->telegram_link }}
+                        @if($classroom?->telegram_link)
+                            <a href="{{ $classroom->telegram_link }}" class="telegram-link">
+                                Groupe Telegram : {{ $classroom->telegram_link }}
                             </a>
                         @endif
                     </div>

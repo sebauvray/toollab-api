@@ -11,16 +11,25 @@ class StaffRequest extends FormRequest
     public function authorize()
     {
         $schoolId = $this->input('school_id');
+        $requestedRole = $this->input('role');
 
-        return auth()->user()->roles()
+        $userRoles = auth()->user()->roles()
             ->whereIn('role_id', function ($query) {
                 $query->select('id')
                     ->from('roles')
-                    ->where('slug','director');
+                    ->whereIn('slug', ['director', 'admin']);
             })
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
-            ->exists();
+            ->with('role')
+            ->get()
+            ->pluck('role.slug');
+
+        if ($userRoles->contains('director')) {
+            return true;
+        }
+
+        return in_array($requestedRole, ['registar', 'teacher'], true) && $userRoles->contains('admin');
     }
 
     public function rules()

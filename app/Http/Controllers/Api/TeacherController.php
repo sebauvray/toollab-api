@@ -104,6 +104,7 @@ class TeacherController extends Controller
 
         $yearId = currentSchoolYearId();
         $year = $yearId ? SchoolYear::find($yearId) : null;
+        $classroom->loadMissing('cursus:id,name,progression');
 
         $outcomes = $yearId
             ? StudentYearOutcome::query()
@@ -152,6 +153,11 @@ class TeacherController extends Controller
                     'id' => $classroom->id,
                     'name' => $classroom->name,
                     'gender' => $classroom->gender,
+                    'cursus' => $classroom->cursus ? [
+                        'id' => $classroom->cursus->id,
+                        'name' => $classroom->cursus->name,
+                        'progression' => $classroom->cursus->progression,
+                    ] : null,
                 ],
                 'outcomes_open' => $year ? (bool) $year->outcomes_open : false,
                 'is_main_teacher' => $classroom->effectiveMainTeacherId() === auth()->id(),
@@ -183,12 +189,25 @@ class TeacherController extends Controller
             return response()->json(['message' => 'Saisie des décisions non activée'], 409);
         }
 
+        $classroom->loadMissing('cursus:id,name,progression');
+
         $request->validate([
             'decisions' => 'present|array',
             'decisions.*.student_id' => 'required|integer|exists:users,id',
             'decisions.*.outcome' => 'required|in:passage,redoublement,exclusion,fin_cursus',
             'decisions.*.commentaire' => 'nullable|string|max:2000',
         ]);
+
+        if ($classroom->cursus?->progression === 'continu') {
+            $hasLevelDecision = collect($request->input('decisions'))
+                ->contains(fn ($decision) => in_array($decision['outcome'] ?? null, ['passage', 'redoublement'], true));
+
+            if ($hasLevelDecision) {
+                return response()->json([
+                    'message' => 'Cette classe appartient à un cursus continu : passage et redoublement ne peuvent pas être saisis.',
+                ], 422);
+            }
+        }
 
         $enrolledIds = StudentClassroom::query()
             ->where('classroom_id', $classroom->id)
