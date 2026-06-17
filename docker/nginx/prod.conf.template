@@ -26,7 +26,13 @@ server {
     }
 
     location ~ \.php$ {
-        fastcgi_pass   ${CONTAINER_NAME_API}:9000;
+        # Résolution dynamique de l'upstream via le DNS interne Docker (127.0.0.11).
+        # Un nom en dur fige l'IP au démarrage de nginx ; en passant par une variable
+        # + resolver, nginx re-résout le nom en continu et suit l'IP même si le
+        # conteneur api est recréé (évite le 502 après un `docker compose up -d api`).
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $api_upstream ${CONTAINER_NAME_API};
+        fastcgi_pass   $api_upstream:9000;
 
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
