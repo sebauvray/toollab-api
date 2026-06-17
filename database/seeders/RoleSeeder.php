@@ -22,6 +22,8 @@ class RoleSeeder extends Seeder
             ['name' => 'Professeur', 'slug' => 'teacher'],
         ];
 
-        Role::insert($roles);
+        foreach ($roles as $role) {
+            Role::firstOrCreate(['slug' => $role['slug']], ['name' => $role['name']]);
+        }
     }
 }

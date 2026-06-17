@@ -48,3 +48,13 @@ Projet run at http://localhost:8000/
 ```
 docker exec api_dev_toollab php artisan migrate:fresh --seed --force
 ```
+
+
+
+### Réinitialiser sans seed
+
+```
+docker exec api_dev_toollab php artisan migrate:fresh --force && \
+docker exec api_dev_toollab php artisan db:seed --class=ProductionSeeder --force && \
+docker exec api_dev_toollab php artisan toollab:create-super-admin --password=password
+```
