@@ -161,6 +161,14 @@ class SchoolController extends Controller
             return response()->json(['message' => 'Accès refusé'], 403);
         }
 
+        $director = $school->userRoles()
+            ->whereHas('role', fn ($query) => $query->where('slug', 'director'))
+            ->with('user:id,first_name,last_name,email,access')
+            ->first()
+            ?->user;
+
+        $school->setAttribute('director', $director);
+
         return $school;
     }
 
