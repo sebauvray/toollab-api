@@ -29,7 +29,7 @@ class StoreSchoolRequest extends FormRequest
 
             'director_first_name' => 'required|string|max:255',
             'director_last_name' => 'required|string|max:255',
-            'director_email' => 'required|email|max:255|unique:users,email',
+            'director_email' => 'required|email|max:255',
         ];
     }
 
@@ -80,7 +80,6 @@ class StoreSchoolRequest extends FormRequest
             'director_email.required' => 'L\'email du directeur est obligatoire.',
             'director_email.email' => 'L\'adresse email du directeur n\'est pas valide.',
             'director_email.max' => 'L\'email du directeur ne peut pas dépasser 255 caractères.',
-            'director_email.unique' => 'Cette adresse email est déjà utilisée.',
         ];
     }
 }

@@ -2,11 +2,18 @@
 
 namespace App\Notifications;
 
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class StaffInvitation extends Notification
+class StaffInvitation extends Notification implements ShouldQueue
 {
+    use Queueable;
+
+    public int $tries = 3;
+    public array $backoff = [60, 300, 900];
+
     private $schoolName;
     private $roleName;
     private $token;
@@ -21,6 +28,7 @@ class StaffInvitation extends Notification
         $this->roleName = $roleName;
         $this->token = $token;
         $this->frontendUrl = config('app.frontend_url', 'http://localhost:3000');
+        $this->afterCommit = true;
     }
 
     /**

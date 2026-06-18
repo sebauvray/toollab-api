@@ -358,7 +358,7 @@ class FamilyController extends Controller
             'firstname' => 'required|string|max:255',
             'phone' => 'required|string',
             'address' => 'required|string',
-            'email' => 'required|email|unique:users,email',
+            'email' => 'required|email',
             'zipcode' => 'required|string',
             'city' => 'required|string',
             'is_student' => 'boolean',
@@ -375,8 +375,6 @@ class FamilyController extends Controller
 
             'email.required' => 'L\'adresse email est requise.',
             'email.email' => 'L\'adresse email doit être une adresse valide.',
-            'email.unique' => 'L\'adresse email est déjà utilisée.',
-
             'phone.required' => 'Le numéro de téléphone est requis.',
             'phone.string' => 'Le numéro de téléphone doit être une chaîne de caractères.',
 
@@ -406,13 +404,7 @@ class FamilyController extends Controller
                 throw new \Exception('Requête invalide');
             }
 
-            $user = User::create([
-                'first_name' => $request->firstname,
-                'last_name' => $request->lastname,
-                'email' => $request->email,
-                'password' => Hash::make($request->password ?? str()->random(12)),
-                'access' => true
-            ]);
+            $user = $this->findOrCreateResponsibleUser($request);
 
             $responsibleRole = Role::where('slug', 'responsible')->first();
 
@@ -427,7 +419,7 @@ class FamilyController extends Controller
 
             $family = Family::create();
 
-            $family->userRoles()->create([
+            $family->userRoles()->firstOrCreate([
                 'user_id' => $user->id,
                 'role_id' => $responsibleRole->id,
             ]);
@@ -840,7 +832,7 @@ class FamilyController extends Controller
             'firstname' => 'required|string|max:255',
             'phone' => 'required|string',
             'address' => 'required|string',
-            'email' => 'required|email|unique:users,email',
+            'email' => 'required|email',
             'zipcode' => 'required|string',
             'city' => 'required|string',
             'is_student' => 'boolean',
@@ -857,8 +849,6 @@ class FamilyController extends Controller
 
             'email.required' => 'L\'adresse email est requise.',
             'email.email' => 'L\'adresse email doit être une adresse valide.',
-            'email.unique' => 'L\'adresse email est déjà utilisée.',
-
             'phone.required' => 'Le numéro de téléphone est requis.',
             'phone.string' => 'Le numéro de téléphone doit être une chaîne de caractères.',
 
@@ -883,13 +873,7 @@ class FamilyController extends Controller
         DB::beginTransaction();
 
         try {
-            $user = User::create([
-                'first_name' => $request->firstname,
-                'last_name' => $request->lastname,
-                'email' => $request->email,
-                'password' => Hash::make($request->password ?? str()->random(12)),
-                'access' => true
-            ]);
+            $user = $this->findOrCreateResponsibleUser($request);
 
             $responsibleRole = Role::where('slug', 'responsible')->first();
             if (!$responsibleRole) {
@@ -901,7 +885,7 @@ class FamilyController extends Controller
             $this->updateOrCreateUserInfo($user, self::KEY_ZIPCODE, $request->zipcode);
             $this->updateOrCreateUserInfo($user, self::KEY_CITY, $request->city);
 
-            $family->userRoles()->create([
+            $family->userRoles()->firstOrCreate([
                 'user_id' => $user->id,
                 'role_id' => $responsibleRole->id,
             ]);
@@ -1099,6 +1083,23 @@ class FamilyController extends Controller
                     ->where('roles.slug', 'student');
             })
             ->exists();
+    }
+
+    private function findOrCreateResponsibleUser(Request $request): User
+    {
+        $user = User::where('email', $request->email)->first();
+
+        if ($user) {
+            return $user;
+        }
+
+        return User::create([
+            'first_name' => $request->firstname,
+            'last_name' => $request->lastname,
+            'email' => $request->email,
+            'password' => Hash::make($request->password ?? str()->random(12)),
+            'access' => true,
+        ]);
     }
 
     private function updateOrCreateUserInfo(User $user, $key, $value)

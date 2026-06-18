@@ -77,15 +77,24 @@ class SchoolController extends Controller
                 'country' => $validatedData['country'] ?? null,
                 'logo' => $validatedData['logo'] ?? null,
                 'access' => $validatedData['access'],
+                'siret' => $validatedData['siret'] ?? null,
+                'vat_mode' => $validatedData['vat_mode'] ?? null,
+                'vat_number' => $validatedData['vat_number'] ?? null,
             ]);
 
-            $director = User::create([
-                'first_name' => $validatedData['director_first_name'],
-                'last_name' => $validatedData['director_last_name'],
-                'email' => $validatedData['director_email'],
-                'password' => bcrypt(Str::random(32)),
-                'access' => true,
-            ]);
+            $director = User::where('email', $validatedData['director_email'])->first();
+            $isNewDirector = false;
+
+            if (!$director) {
+                $director = User::create([
+                    'first_name' => $validatedData['director_first_name'],
+                    'last_name' => $validatedData['director_last_name'],
+                    'email' => $validatedData['director_email'],
+                    'password' => bcrypt(Str::random(32)),
+                    'access' => true,
+                ]);
+                $isNewDirector = true;
+            }
 
             $directorRole = Role::where('slug', 'director')->first();
 
@@ -93,7 +102,7 @@ class SchoolController extends Controller
                 throw new \Exception('Le rôle de directeur n\'existe pas dans la base de données');
             }
 
-            $school->userRoles()->create([
+            $school->userRoles()->firstOrCreate([
                 'user_id' => $director->id,
                 'role_id' => $directorRole->id,
             ]);
@@ -110,19 +119,22 @@ class SchoolController extends Controller
             $year->school_id = $school->id;
             $year->save();
 
-            $token = Str::random(64);
+            if ($isNewDirector) {
+                $token = Str::random(64);
 
-            InvitationToken::create([
-                'email' => $director->email,
-                'token' => $token,
-                'expires_at' => now()->addDays(7),
-            ]);
+                InvitationToken::create([
+                    'email' => $director->email,
+                    'token' => $token,
+                    'expires_at' => now()->addDays(7),
+                ]);
 
-            $director->notify(new DirectorInvitation($school->name, $token));
+                $director->notify(new DirectorInvitation($school->name, $token));
+            }
 
             DB::commit();
 
             $school->director = $director;
+            $school->invitation_sent = $isNewDirector;
 
             return response()->json($school, 201);
         } catch (\Exception $e) {

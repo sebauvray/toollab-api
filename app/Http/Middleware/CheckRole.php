@@ -28,7 +28,7 @@ class CheckRole
                 'user_id' => $user->id,
                 'path' => $request->path(),
             ]);
-            return response()->json(['message' => 'Requête invalide'], 400);
+            return response()->json(['message' => 'Aucune école sélectionnée.'], 400);
         }
 
         $userRoleSlugs = UserRole::where('user_id', $user->id)
@@ -51,6 +51,6 @@ class CheckRole
             'required' => $roles,
             'user_roles' => $userRoleSlugs,
         ]);
-        return response()->json(['message' => 'Accès refusé'], 403);
+        return response()->json(['message' => 'Vous n’avez pas le rôle nécessaire pour effectuer cette action.'], 403);
     }
 }

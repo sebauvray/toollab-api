@@ -21,7 +21,7 @@ class SchoolYearContext
     {
         $schoolId = currentSchoolId();
         if ($schoolId === null) {
-            return response()->json(['message' => 'Requête invalide'], 400);
+            return response()->json(['message' => 'Aucune école sélectionnée.'], 400);
         }
 
         $raw = $request->header('X-School-Year-Id');
@@ -33,7 +33,7 @@ class SchoolYearContext
                     'raw' => $raw,
                     'path' => $request->path(),
                 ]);
-                return response()->json(['message' => 'Requête invalide'], 400);
+                return response()->json(['message' => 'L’année scolaire sélectionnée est invalide.'], 400);
             }
 
             $year = SchoolYear::query()
@@ -48,7 +48,7 @@ class SchoolYearContext
                     'year_id' => (int) $raw,
                     'path' => $request->path(),
                 ]);
-                return response()->json(['message' => 'Accès refusé'], 403);
+                return response()->json(['message' => 'Cette année scolaire n’appartient pas à l’école sélectionnée.'], 403);
             }
         } else {
             $year = SchoolYear::query()
@@ -73,7 +73,7 @@ class SchoolYearContext
                         'school_id' => $schoolId,
                         'path' => $request->path(),
                     ]);
-                    return response()->json(['message' => 'Aucune année scolaire'], 409);
+                    return response()->json(['message' => 'Aucune année scolaire n’est configurée pour cette école.'], 409);
                 }
             }
         }
@@ -90,7 +90,7 @@ class SchoolYearContext
                 'path' => $request->path(),
             ]);
             return response()->json([
-                'message' => 'Année scolaire en lecture seule',
+                'message' => 'Cette action est impossible sur une année scolaire clôturée.',
                 'read_only' => true,
             ], 409);
         }

@@ -28,7 +28,7 @@ class SchoolContext
                 'raw' => $raw,
                 'path' => $request->path(),
             ]);
-            return response()->json(['message' => 'Requête invalide'], 400);
+            return response()->json(['message' => 'Aucune école sélectionnée.'], 400);
         }
 
         $schoolId = (int) $raw;
@@ -41,7 +41,7 @@ class SchoolContext
                 'requested_school_id' => $schoolId,
                 'path' => $request->path(),
             ]);
-            return response()->json(['message' => 'Accès refusé'], 403);
+            return response()->json(['message' => 'Vous n’avez pas accès à cette école.'], 403);
         }
 
         $request->attributes->set('current_school_id', $schoolId);

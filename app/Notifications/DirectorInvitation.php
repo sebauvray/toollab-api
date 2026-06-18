@@ -2,12 +2,18 @@
 
 namespace App\Notifications;
 
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
-class DirectorInvitation extends Notification
+class DirectorInvitation extends Notification implements ShouldQueue
 {
+    use Queueable;
+
+    public int $tries = 3;
+    public array $backoff = [60, 300, 900];
+
     private $schoolName;
     private $token;
     private $frontendUrl;
@@ -20,6 +26,7 @@ class DirectorInvitation extends Notification
         $this->schoolName = $schoolName;
         $this->token = $token;
         $this->frontendUrl = config('app.frontend_url', 'http://localhost:3000');
+        $this->afterCommit = true;
     }
 
     /**
