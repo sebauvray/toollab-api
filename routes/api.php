@@ -77,7 +77,9 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         });
 
         Route::post('/users/create-staff', [StaffController::class, 'createStaffUser']);
+        Route::post('/users/add-role', [StaffController::class, 'addUserRole']);
         Route::post('/users/remove-role', [StaffController::class, 'removeUserRole']);
+        Route::post('/users/remove-from-school', [StaffController::class, 'removeUserFromSchool']);
 
         Route::prefix('schools')->group(function () {
             Route::get('/{school}/families', [SchoolController::class, 'getAllFamiliesInSchool']);
