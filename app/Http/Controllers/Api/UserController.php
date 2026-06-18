@@ -196,6 +196,7 @@ class UserController extends Controller
 
                 return [
                     'role' => $userRole->role->name,
+                    'role_slug' => $userRole->role->slug,
                     'context' => $contextData,
                 ];
             })
