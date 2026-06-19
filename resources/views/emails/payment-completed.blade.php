@@ -227,9 +227,15 @@
                 <span>{{ number_format($paymentDetails['montant_total'], 2, ',', ' ') }} €</span>
             </div>
             <div class="summary-row">
-                <span>Montant payé</span>
-                <span>{{ number_format($paymentDetails['montant_paye'], 2, ',', ' ') }} €</span>
+                <span>Montant réglé</span>
+                <span>{{ number_format($paymentDetails['montant_encaisse'] ?? $paymentDetails['montant_paye'], 2, ',', ' ') }} €</span>
             </div>
+            @if(($paymentDetails['montant_exonere'] ?? 0) > 0)
+                <div class="summary-row">
+                    <span>Exonéré</span>
+                    <span>{{ number_format($paymentDetails['montant_exonere'], 2, ',', ' ') }} €</span>
+                </div>
+            @endif
             <div class="summary-row summary-total">
                 <span>Reste à payer</span>
                 <span>0,00 €</span>
