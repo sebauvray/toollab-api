@@ -116,8 +116,8 @@ class StaffController extends Controller
 
             if (!$user) {
                 $user = User::create([
-                    'first_name' => $request->first_name,
-                    'last_name' => $request->last_name,
+                    'first_name' => $request->filled('first_name') ? $request->first_name : null,
+                    'last_name' => $request->filled('last_name') ? $request->last_name : null,
                     'email' => $request->email,
                     'password' => bcrypt(Str::random(32)),
                     'access' => true,

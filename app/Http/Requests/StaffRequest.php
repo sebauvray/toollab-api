@@ -53,8 +53,8 @@ class StaffRequest extends FormRequest
     public function rules()
     {
         return [
-            'first_name' => 'required|string',
-            'last_name' => 'required|string',
+            'first_name' => 'nullable|string|max:255',
+            'last_name' => 'nullable|string|max:255',
             'email' => 'required|email',
             'role' => 'required|in:admin,registar,teacher',
             'roles' => 'sometimes|array|min:1',

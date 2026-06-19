@@ -71,7 +71,7 @@
     </div>
     <div class="content">
         <h2>Invitation à rejoindre l'équipe</h2>
-        <p>Bonjour {{ $notifiable->first_name }} {{ $notifiable->last_name }},</p>
+        <p>Bonjour {{ trim(($notifiable->first_name ?? '') . ' ' . ($notifiable->last_name ?? '')) ?: $notifiable->email }},</p>
         <p>Vous avez été invité(e) à rejoindre l'équipe de <strong>{{ $schoolName }}</strong>.</p>
         @if(!empty($roleNames) && count($roleNames) > 1)
             <p>Les rôles qui vous ont été attribués sont :</p>

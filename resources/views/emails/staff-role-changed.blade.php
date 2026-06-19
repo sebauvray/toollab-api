@@ -48,7 +48,7 @@
     </div>
     <div class="content">
         <h2>Mise à jour de vos rôles</h2>
-        <p>Bonjour {{ $notifiable->first_name }} {{ $notifiable->last_name }},</p>
+        <p>Bonjour {{ trim(($notifiable->first_name ?? '') . ' ' . ($notifiable->last_name ?? '')) ?: $notifiable->email }},</p>
 
         @if($action === 'added')
             <p>Un nouveau rôle vous a été attribué dans l'établissement <strong>{{ $schoolName }}</strong>.</p>

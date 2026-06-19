@@ -43,18 +43,29 @@ class InvitationController extends Controller
             'message' => 'Le token d\'invitation est valide',
             'user' => [
                 'email' => $user->email,
-                'name' => $user->first_name . ' ' . $user->last_name
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+                'requires_profile' => blank($user->first_name) || blank($user->last_name),
             ]
         ]);
     }
 
     public function setPassword(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'email' => 'required|email',
             'token' => 'required',
             'password' => 'required|min:8|confirmed',
-        ]);
+        ];
+
+        $existingUser = User::where('email', $request->email)->first();
+        if ($existingUser && (blank($existingUser->first_name) || blank($existingUser->last_name))) {
+            $rules['first_name'] = 'required|string|max:255';
+            $rules['last_name'] = 'required|string|max:255';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json([
@@ -76,6 +87,10 @@ class InvitationController extends Controller
             ], 404);
         }
 
+        if (blank($user->first_name) || blank($user->last_name)) {
+            $user->first_name = $request->first_name;
+            $user->last_name = $request->last_name;
+        }
         $user->password = Hash::make($request->password);
         $user->save();
 
