@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\School;
 use App\Models\User;
 use App\Models\UserRole;
+use App\Notifications\SchoolInvitationNotification;
 use App\Notifications\StaffInvitation;
 use App\Notifications\StaffRoleChangedNotification;
 use App\Support\StaffRolePermissions;
@@ -111,7 +112,16 @@ class StaffController extends Controller
 
         $existingUser = User::where('email', $request->email)->first();
 
-        [$user, $message, $createdRoleSlugs] = DB::transaction(function () use ($request, $school, $roles, $roleSlugs, $existingUser) {
+        // Une adhésion à l'école n'est "acceptée" (et le nom visible par l'école) que
+        // lorsque l'utilisateur a activé son compte ou accepté l'invitation via connexion.
+        $alreadyAccepted = $existingUser
+            ? $school->userRoles()
+                ->where('user_id', $existingUser->id)
+                ->whereNotNull('accepted_at')
+                ->exists()
+            : false;
+
+        [$user, $message, $createdRoleSlugs] = DB::transaction(function () use ($request, $school, $roles, $roleSlugs, $existingUser, $alreadyAccepted) {
             $user = $existingUser;
 
             if (!$user) {
@@ -124,18 +134,27 @@ class StaffController extends Controller
                 ]);
             }
 
+            // Les adhésions sont créées "en attente" (accepted_at = null) : tant que
+            // l'utilisateur n'a pas accepté, l'école ne voit pas son identité.
             $createdRoleSlugs = [];
             foreach ($roleSlugs as $roleSlug) {
-                $userRole = $school->userRoles()->firstOrCreate([
-                    'user_id' => $user->id,
-                    'role_id' => $roles[$roleSlug]->id,
-                ]);
+                $userRole = $school->userRoles()->firstOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'role_id' => $roles[$roleSlug]->id,
+                    ],
+                    // Si l'utilisateur a déjà accepté cette école, les nouveaux rôles
+                    // naissent acceptés (son nom est déjà visible) ; sinon ils restent
+                    // en attente jusqu'à l'acceptation de l'invitation.
+                    $alreadyAccepted ? ['accepted_at' => now()] : []
+                );
 
                 if ($userRole->wasRecentlyCreated) {
                     $createdRoleSlugs[] = $roleSlug;
                 }
             }
 
+            // Nouvel utilisateur : invitation classique (activation du compte + mot de passe).
             if (!$existingUser) {
                 $token = Str::random(64);
 
@@ -154,6 +173,25 @@ class StaffController extends Controller
                 return [$user, 'Utilisateur créé avec succès. Un email d\'invitation a été envoyé.', $createdRoleSlugs];
             }
 
+            // Utilisateur existant qui n'a pas encore accepté pour cette école :
+            // on (re)génère un token lié à l'école et on envoie une invitation à accepter.
+            if (!$alreadyAccepted) {
+                $token = Str::random(64);
+
+                InvitationToken::updateOrCreate(
+                    ['email' => $user->email, 'school_id' => $school->id],
+                    ['token' => $token, 'expires_at' => now()->addDays(7)]
+                );
+
+                $user->notify(new SchoolInvitationNotification(
+                    $school->name,
+                    $this->roleNamesFromSlugs($roleSlugs),
+                    $token
+                ));
+
+                return [$user, 'Invitation envoyée. Le nom de l\'utilisateur sera visible après son acceptation.', $createdRoleSlugs];
+            }
+
             if (!empty($createdRoleSlugs)) {
                 $user->notify(new StaffRoleChangedNotification(
                     $school->name,
@@ -168,13 +206,17 @@ class StaffController extends Controller
             return [$user, 'L\'utilisateur possède déjà ce rôle dans cette école.', $createdRoleSlugs];
         });
 
+        // Tant que l'invitation n'est pas acceptée, l'école ne doit pas voir le nom.
+        $pending = !$alreadyAccepted;
+
         return response()->json([
             'message' => $message,
             'user' => [
                 'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
+                'first_name' => $pending ? null : $user->first_name,
+                'last_name' => $pending ? null : $user->last_name,
                 'email' => $user->email,
+                'pending' => $pending,
                 'role' => $primaryRole->name,
                 'roles' => $this->currentSchoolRoleNames($user, $school->id),
             ]

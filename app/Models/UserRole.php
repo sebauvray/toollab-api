@@ -16,7 +16,12 @@ class UserRole extends Model
         'role_id',
         'roleable_id',
         'roleable_type',
-            ];
+        'accepted_at',
+    ];
+
+    protected $casts = [
+        'accepted_at' => 'datetime',
+    ];
 
     public function user()
     {

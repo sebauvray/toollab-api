@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invitation à rejoindre l'équipe</title>
+    <title>Invitation à rejoindre une école</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -70,9 +70,9 @@
         </svg>
     </div>
     <div class="content">
-        <h2>Invitation à rejoindre l'équipe</h2>
+        <h2>Invitation à rejoindre une école</h2>
         <p>Bonjour {{ trim(($notifiable->first_name ?? '') . ' ' . ($notifiable->last_name ?? '')) ?: $notifiable->email }},</p>
-        <p>Vous avez été invité(e) à rejoindre l'équipe de <strong>{{ $schoolName }}</strong>.</p>
+        <p>Vous avez été invité(e) à rejoindre l'école <strong>{{ $schoolName }}</strong> avec votre compte Toollab existant.</p>
         @if(!empty($roleNames) && count($roleNames) > 1)
             <p>Les rôles qui vous ont été attribués sont :</p>
             <ul>
@@ -82,16 +82,14 @@
             </ul>
         @elseif(!empty($roleName))
             <p>Le rôle qui vous a été attribué est : <strong>{{ $roleName }}</strong>.</p>
-        @else
-            <p>Un accès à cet établissement vous a été attribué.</p>
         @endif
-        <p>Pour activer votre compte, cliquez sur le lien ci-dessous.</p>
-        <p><a href="{{ $actionUrl }}" class="button"  style="color: white">Activer mon compte</a></p>
+        <p>Pour accepter cette invitation, connectez-vous à votre compte en cliquant sur le lien ci-dessous.</p>
+        <p><a href="{{ $actionUrl }}" class="button" style="color: white">Accepter l'invitation</a></p>
         <p>Ce lien d'invitation expirera dans 7 jours.</p>
         <p>Cordialement,<br>L'équipe Toollab</p>
     </div>
     <div class="footer">
-        <p>Si vous rencontrez des problèmes en cliquant sur le bouton "Activer mon compte", copiez et collez l'URL ci-dessous dans votre navigateur web: {{ $actionUrl }}</p>
+        <p>Si vous rencontrez des problèmes en cliquant sur le bouton "Accepter l'invitation", copiez et collez l'URL ci-dessous dans votre navigateur web: {{ $actionUrl }}</p>
     </div>
 </div>
 </body>
