@@ -41,13 +41,16 @@ class PaiementController extends Controller
         try {
             $details = $this->paiementService->getDetailsPaiement($family);
             $total = (int) round($details['montant_total']);
-            $paye = (int) round($details['montant_paye']);
+            // « Montant réglé » = encaissé réel (hors exonérations) ; l'exonéré est
+            // une remise affichée séparément, pas un règlement.
+            $paye = (int) round($details['montant_encaisse']);
+            $exonere = (int) round($details['montant_exonere']);
 
-            if ($total <= 0 && $paye <= 0) {
+            if ($total <= 0 && $paye <= 0 && $exonere <= 0) {
                 return response()->json(['status' => 'error', 'message' => 'Aucun montant à facturer pour cette famille'], 422);
             }
 
-            $reste = max(0, $total - $paye);
+            $reste = max(0, $total - $paye - $exonere);
             $lignes = $details['paiement']?->lignes ?? collect();
             $acquitteeLe = $reste === 0 && $lignes->isNotEmpty()
                 ? $lignes->max('created_at')->format('d/m/Y')
@@ -100,6 +103,7 @@ class PaiementController extends Controller
                 'nombre_eleves' => (int) ($details['tarifs']['nombre_eleves'] ?? 0),
                 'total' => $total,
                 'paye' => $paye,
+                'exonere' => $exonere,
                 'reste' => $reste,
                 'assujetti' => $school->vat_mode === 'assujetti',
                 'acquittee' => $reste === 0,

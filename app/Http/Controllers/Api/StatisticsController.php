@@ -134,8 +134,13 @@ class StatisticsController extends Controller
             $query->whereIn('family_id', $families);
         })->get();
 
+        // Encaissé réel = trésorerie reçue (hors exonérations, qui sont des remises).
+        $encaisse = round($payments->whereIn('type_paiement', ['cheque', 'espece', 'carte'])->sum('montant'));
+        $exonere = round($payments->where('type_paiement', 'exoneration')->sum('montant'));
+
         $stats = [
-            'total_amount' => round($payments->sum('montant')),
+            'total_amount' => $encaisse,
+            'exoneration_amount' => $exonere,
             'by_type' => [
                 'cheque' => [
                     'amount' => round($payments->where('type_paiement', 'cheque')->sum('montant')),
@@ -150,16 +155,21 @@ class StatisticsController extends Controller
                     'count' => $payments->where('type_paiement', 'carte')->count(),
                 ],
                 'exoneration' => [
-                    'amount' => round($payments->where('type_paiement', 'exoneration')->sum('montant')),
+                    'amount' => $exonere,
                     'count' => $payments->where('type_paiement', 'exoneration')->count(),
                 ],
             ],
         ];
 
         $expectedRevenue = array_sum(array_column($financials['families'], 'expected'));
-        $stats['remaining'] = round($expectedRevenue - $stats['total_amount']);
+        // Reste réellement dû = attendu − encaissé − exonéré (l'exonéré solde la part remisée).
+        $stats['remaining'] = round($expectedRevenue - $encaisse - $exonere);
         $stats['expected'] = round($expectedRevenue);
-        $stats['payment_rate'] = $expectedRevenue > 0 ? round(($stats['total_amount'] / $expectedRevenue) * 100, 2) : 0;
+        // Taux d'encaissement : part réellement encaissée. Taux de recouvrement :
+        // part soldée (encaissé + exonéré). payment_rate conservé = recouvrement.
+        $stats['collection_rate'] = $expectedRevenue > 0 ? round(($encaisse / $expectedRevenue) * 100, 2) : 0;
+        $stats['recovery_rate'] = $expectedRevenue > 0 ? round((($encaisse + $exonere) / $expectedRevenue) * 100, 2) : 0;
+        $stats['payment_rate'] = $stats['recovery_rate'];
 
         return $stats;
     }

@@ -182,6 +182,9 @@ class FacturePdfService
             $rows[] = ['Montant total', self::euros($f['total']), 'F2', self::DARK];
         }
         $rows[] = ['Montant réglé', self::euros($f['paye']), 'F1', self::GRAY];
+        if (! empty($f['exonere'])) {
+            $rows[] = ['Exonéré', self::euros($f['exonere']), 'F1', self::GRAY];
+        }
         $rows[] = ['Reste à payer', self::euros($f['reste']), 'F2', $f['reste'] > 0 ? self::RED : self::GREEN];
 
         return $rows;

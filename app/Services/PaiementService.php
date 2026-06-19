@@ -91,10 +91,18 @@ class PaiementService
         $montantTotal = $tarifs['total'];
         $resteAPayer = $montantTotal - $montantPaye;
 
+        // Distinction comptable : l'encaissé réel (trésorerie reçue) exclut les
+        // exonérations, qui sont des remises et non des règlements.
+        $montantExonere = $details['exoneration'];
+        $montantEncaisse = $montantPaye - $montantExonere;
+
         return [
             'paiement' => $paiement,
             'montant_total' => $montantTotal,
+            // montant_paye = soldé (encaissé + exonéré). Sert au calcul du reste à payer.
             'montant_paye' => $montantPaye,
+            'montant_encaisse' => $montantEncaisse,
+            'montant_exonere' => $montantExonere,
             'reste_a_payer' => $resteAPayer,
             'details' => $details,
             'tarifs' => $tarifs
