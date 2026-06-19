@@ -24,10 +24,6 @@
             background-color: #ffffff;
             border-bottom: 1px solid #e0e0e0;
         }
-        .logo {
-            height: 40px;
-            width: auto;
-        }
         .content {
             padding: 40px 30px;
         }
