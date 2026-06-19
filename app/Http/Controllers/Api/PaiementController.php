@@ -54,7 +54,10 @@ class PaiementController extends Controller
                 : null;
 
             $school = $family->school;
-            $responsables = $family->responsibles()->with('infos')->get();
+            // Dédoublonnage : un utilisateur qui est à la fois responsable ET élève
+            // de la famille a deux lignes user_roles, donc la relation le renvoie en
+            // double. On ne veut le « Facturé à » qu'une seule fois par personne.
+            $responsables = $family->responsibles()->with('infos')->get()->unique('id')->values();
             $names = $responsables
                 ->map(fn ($responsable) => trim($responsable->first_name.' '.$responsable->last_name))
                 ->filter()
