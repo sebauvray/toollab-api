@@ -51,10 +51,13 @@ class SchoolContext
 
     private function userHasAccess(int $userId, int $schoolId): bool
     {
+        // Une adhésion à l'école n'ouvre l'accès qu'une fois l'invitation acceptée
+        // (accepted_at non null). Tant qu'elle est en attente, aucun accès.
         $direct = UserRole::query()
             ->where('user_id', $userId)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
+            ->whereNotNull('accepted_at')
             ->exists();
         if ($direct) {
             return true;

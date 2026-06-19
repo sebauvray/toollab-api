@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Validator;
 
 class InvitationController extends Controller
 {
-
     public function checkInvitationToken(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -27,8 +26,7 @@ class InvitationController extends Controller
             ], 422);
         }
 
-        $token = InvitationToken::with('school')
-            ->where('email', $request->email)
+        $token = InvitationToken::where('email', $request->email)
             ->where('token', $request->token)
             ->where('expires_at', '>', now())
             ->first();
@@ -43,10 +41,6 @@ class InvitationController extends Controller
 
         return response()->json([
             'message' => 'Le token d\'invitation est valide',
-            // 'accept' : utilisateur existant qui accepte de rejoindre une école précise
-            // (il doit se connecter). 'activate' : nouveau compte à activer (mot de passe).
-            'mode' => $token->school_id ? 'accept' : 'activate',
-            'school_name' => $token->school?->name,
             'user' => [
                 'email' => $user->email,
                 'first_name' => $user->first_name,
@@ -58,54 +52,93 @@ class InvitationController extends Controller
     }
 
     /**
-     * Acceptation d'une invitation par un utilisateur DÉJÀ existant.
-     * Endpoint authentifié : l'acceptation (et donc la révélation du nom à
-     * l'école invitante) n'a lieu qu'une fois l'utilisateur connecté, après avoir
-     * suivi le lien reçu par email.
+     * Liste les invitations d'école en attente de l'utilisateur connecté.
+     * Une invitation est "en attente" tant que l'adhésion n'a pas été acceptée
+     * (accepted_at null) : l'école ne voit alors pas le nom de l'utilisateur.
+     */
+    public function myInvitations(Request $request)
+    {
+        $user = $request->user();
+
+        $pending = $user->roles()
+            ->whereIn('roleable_type', ['school', School::class])
+            ->whereNull('accepted_at')
+            ->with(['role', 'roleable'])
+            ->get();
+
+        return $pending
+            ->groupBy('roleable_id')
+            ->map(function ($group) {
+                return [
+                    'school_id' => $group->first()->roleable_id,
+                    'school_name' => $group->first()->roleable?->name,
+                    'roles' => $group->map(fn ($ur) => $ur->role?->name)->filter()->values(),
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * Acceptation explicite d'une invitation, depuis l'application.
+     * Le nom de l'utilisateur devient alors visible par l'école concernée.
      */
     public function acceptInvitation(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'token' => 'required',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Les données fournies sont incorrectes',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        $request->validate(['school_id' => 'required|integer']);
 
         $user = $request->user();
 
-        $token = InvitationToken::with('school')
-            ->where('token', $request->token)
-            ->where('email', $user->email)
-            ->whereNotNull('school_id')
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (!$token) {
-            return response()->json([
-                'message' => 'L\'invitation est invalide ou a expiré'
-            ], 404);
-        }
-
-        $user->roles()
+        $updated = $user->roles()
             ->whereIn('roleable_type', ['school', School::class])
-            ->where('roleable_id', $token->school_id)
+            ->where('roleable_id', $request->school_id)
             ->whereNull('accepted_at')
             ->update(['accepted_at' => now()]);
 
-        $schoolName = $token->school?->name;
+        if (!$updated) {
+            return response()->json([
+                'message' => 'Aucune invitation en attente pour cette école'
+            ], 404);
+        }
 
-        $token->delete();
+        InvitationToken::where('email', $user->email)
+            ->where('school_id', $request->school_id)
+            ->delete();
+
+        $school = School::find($request->school_id);
 
         return response()->json([
-            'message' => $schoolName
-                ? 'Vous avez rejoint ' . $schoolName . '.'
-                : 'Invitation acceptée.',
-            'school_name' => $schoolName,
+            'message' => 'Vous avez rejoint ' . ($school?->name ?? 'l\'école') . '.',
+        ]);
+    }
+
+    /**
+     * Refus d'une invitation : l'accès à l'école est retiré (les adhésions en
+     * attente sont supprimées).
+     */
+    public function declineInvitation(Request $request)
+    {
+        $request->validate(['school_id' => 'required|integer']);
+
+        $user = $request->user();
+
+        $deleted = $user->roles()
+            ->whereIn('roleable_type', ['school', School::class])
+            ->where('roleable_id', $request->school_id)
+            ->whereNull('accepted_at')
+            ->delete();
+
+        if (!$deleted) {
+            return response()->json([
+                'message' => 'Aucune invitation en attente pour cette école'
+            ], 404);
+        }
+
+        InvitationToken::where('email', $user->email)
+            ->where('school_id', $request->school_id)
+            ->delete();
+
+        return response()->json([
+            'message' => 'Invitation refusée.',
         ]);
     }
 
@@ -152,9 +185,16 @@ class InvitationController extends Controller
         $user->password = Hash::make($request->password);
         $user->save();
 
-        // En activant son compte, l'utilisateur accepte les invitations en attente :
-        // son nom devient visible par les écoles qui l'ont invité.
-        $user->roles()->whereNull('accepted_at')->update(['accepted_at' => now()]);
+        // En activant son compte via le lien d'une école, l'utilisateur accepte
+        // l'invitation de CETTE école uniquement (acceptation explicite et ciblée).
+        // Les éventuelles autres invitations restent en attente (bandeau in-app).
+        if ($token->school_id) {
+            $user->roles()
+                ->whereIn('roleable_type', ['school', School::class])
+                ->where('roleable_id', $token->school_id)
+                ->whereNull('accepted_at')
+                ->update(['accepted_at' => now()]);
+        }
 
         $user->tokens()->delete();
 

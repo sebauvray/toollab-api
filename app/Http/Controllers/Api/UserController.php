@@ -143,6 +143,12 @@ class UserController extends Controller
     {
         $userRoles = $user->roles->where('roleable_type', $type);
 
+        // Pour les écoles, une invitation en attente (accepted_at null) ne confère
+        // aucun rôle/accès tant qu'elle n'a pas été acceptée.
+        if ($type === 'school') {
+            $userRoles = $userRoles->whereNotNull('accepted_at');
+        }
+
         // withoutGlobalScopes : l'endpoint /users/{id}/roles est appelé AVANT
         // qu'une école soit sélectionnée, donc le scope BelongsToSchool filtrerait
         // tout à 0 — on le contourne pour lister toutes les appartenances.

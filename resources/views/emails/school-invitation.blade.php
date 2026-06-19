@@ -83,13 +83,12 @@
         @elseif(!empty($roleName))
             <p>Le rôle qui vous a été attribué est : <strong>{{ $roleName }}</strong>.</p>
         @endif
-        <p>Pour accepter cette invitation, connectez-vous à votre compte en cliquant sur le lien ci-dessous.</p>
-        <p><a href="{{ $actionUrl }}" class="button" style="color: white">Accepter l'invitation</a></p>
-        <p>Ce lien d'invitation expirera dans 7 jours.</p>
+        <p>Connectez-vous à votre compte Toollab : vous pourrez accepter ou refuser cette invitation directement depuis l'application.</p>
+        <p><a href="{{ $actionUrl }}" class="button" style="color: white">Me connecter</a></p>
         <p>Cordialement,<br>L'équipe Toollab</p>
     </div>
     <div class="footer">
-        <p>Si vous rencontrez des problèmes en cliquant sur le bouton "Accepter l'invitation", copiez et collez l'URL ci-dessous dans votre navigateur web: {{ $actionUrl }}</p>
+        <p>Si vous rencontrez des problèmes en cliquant sur le bouton "Me connecter", copiez et collez l'URL ci-dessous dans votre navigateur web: {{ $actionUrl }}</p>
     </div>
 </div>
 </body>

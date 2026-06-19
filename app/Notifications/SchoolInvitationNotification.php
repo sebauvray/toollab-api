@@ -23,14 +23,12 @@ class SchoolInvitationNotification extends Notification implements ShouldQueue
 
     private string $schoolName;
     private array $roleNames;
-    private string $token;
     private string $frontendUrl;
 
-    public function __construct(string $schoolName, string|array $roleNames, string $token)
+    public function __construct(string $schoolName, string|array $roleNames)
     {
         $this->schoolName = $schoolName;
         $this->roleNames = is_array($roleNames) ? array_values($roleNames) : [$roleNames];
-        $this->token = $token;
         $this->frontendUrl = config('app.frontend_url', 'http://localhost:3000');
         $this->afterCommit = true;
     }
@@ -42,7 +40,9 @@ class SchoolInvitationNotification extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $url = $this->frontendUrl . '/login?invitation_token=' . $this->token . '&email=' . urlencode($notifiable->email);
+        // L'acceptation se fait dans l'application (bandeau d'invitations) : le lien
+        // amène simplement l'utilisateur à se connecter.
+        $url = $this->frontendUrl . '/login';
 
         return (new MailMessage)
             ->subject('Invitation à rejoindre ' . $this->schoolName)
@@ -60,7 +60,6 @@ class SchoolInvitationNotification extends Notification implements ShouldQueue
         return [
             'school_name' => $this->schoolName,
             'role_names' => $this->roleNames,
-            'invitation_token' => $this->token,
         ];
     }
 }

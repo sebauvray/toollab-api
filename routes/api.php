@@ -34,7 +34,9 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
 
     // Auth uniquement (sans contexte école)
-    Route::post('/accept-invitation', [InvitationController::class, 'acceptInvitation']);
+    Route::get('/me/invitations', [InvitationController::class, 'myInvitations']);
+    Route::post('/me/invitations/accept', [InvitationController::class, 'acceptInvitation']);
+    Route::post('/me/invitations/decline', [InvitationController::class, 'declineInvitation']);
     Route::post('/users/change-password', [UserPasswordController::class, 'changePassword']);
     Route::get('/users/{user}/roles', [UserController::class, 'getUserRoles'])->whereNumber('user');
     Route::get('/users/{user}', [UserController::class, 'show'])->whereNumber('user')->name('users.show');
