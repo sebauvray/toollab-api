@@ -85,13 +85,13 @@
         @else
             <p>Un accès à cet établissement vous a été attribué.</p>
         @endif
-        <p>Pour accéder à votre compte, veuillez définir votre mot de passe en cliquant sur le bouton ci-dessous.</p>
-        <p><a href="{{ $actionUrl }}" class="button"  style="color: white">Définir mon mot de passe</a></p>
+        <p>Pour activer votre compte, cliquez sur le lien ci-dessous.</p>
+        <p><a href="{{ $actionUrl }}" class="button"  style="color: white">Activer mon compte</a></p>
         <p>Ce lien d'invitation expirera dans 7 jours.</p>
         <p>Cordialement,<br>L'équipe Toollab</p>
     </div>
     <div class="footer">
-        <p>Si vous rencontrez des problèmes en cliquant sur le bouton "Définir mon mot de passe", copiez et collez l'URL ci-dessous dans votre navigateur web: {{ $actionUrl }}</p>
+        <p>Si vous rencontrez des problèmes en cliquant sur le bouton "Activer mon compte", copiez et collez l'URL ci-dessous dans votre navigateur web: {{ $actionUrl }}</p>
     </div>
 </div>
 </body>
