@@ -102,10 +102,17 @@ class SchoolController extends Controller
                 throw new \Exception('Le rôle de directeur n\'existe pas dans la base de données');
             }
 
-            $school->userRoles()->firstOrCreate([
+            $directorRoleEntry = $school->userRoles()->firstOrCreate([
                 'user_id' => $director->id,
                 'role_id' => $directorRole->id,
             ]);
+
+            // Le superadmin fournit lui-même l'identité du directeur : pas de masquage.
+            // Pour un directeur existant, l'adhésion est acceptée immédiatement ; pour un
+            // nouveau directeur, elle le sera à l'activation de son compte (set-password).
+            if (!$isNewDirector && $directorRoleEntry->accepted_at === null) {
+                $directorRoleEntry->update(['accepted_at' => now()]);
+            }
 
             // Initialise une année scolaire active : sans elle, le directeur tombe
             // sur des 409 partout dès qu'il essaie de consulter ses données.

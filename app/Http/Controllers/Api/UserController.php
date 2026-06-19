@@ -474,14 +474,31 @@ class UserController extends Controller
             return $this->denyAccess('user.school_users.no_role', ['school_id' => $school->id]);
         }
 
-        $users = $school->userRoles()
+        $userRoles = $school->userRoles()
             ->with(['user', 'role'])
             ->get();
 
-        return $users
-            ->map(function ($userRole) {
+        // Un utilisateur est "en attente" pour cette école tant qu'aucune de ses
+        // adhésions n'a été acceptée. Dans ce cas, on masque son nom/prénom :
+        // un utilisateur peut être actif dans une autre école et ne pas avoir
+        // accepté de rejoindre celle-ci (confidentialité inter-écoles).
+        $acceptedByUser = $userRoles
+            ->groupBy('user_id')
+            ->map(fn ($group) => $group->contains(fn ($ur) => $ur->accepted_at !== null));
+
+        return $userRoles
+            ->map(function ($userRole) use ($acceptedByUser) {
+                $pending = !($acceptedByUser[$userRole->user_id] ?? false);
+                $user = $userRole->user;
+
                 return [
-                    'user' => $userRole->user,
+                    'user' => [
+                        'id' => $user->id,
+                        'first_name' => $pending ? null : $user->first_name,
+                        'last_name' => $pending ? null : $user->last_name,
+                        'email' => $user->email,
+                        'pending' => $pending,
+                    ],
                     'role' => $userRole->role->slug
                 ];
             });

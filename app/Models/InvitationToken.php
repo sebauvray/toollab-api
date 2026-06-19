@@ -17,6 +17,7 @@ class InvitationToken extends Model
     protected $fillable = [
         'email',
         'token',
+        'school_id',
         'expires_at',
     ];
 
@@ -28,4 +29,9 @@ class InvitationToken extends Model
     protected $casts = [
         'expires_at' => 'datetime',
     ];
+
+    public function school()
+    {
+        return $this->belongsTo(School::class);
+    }
 }
