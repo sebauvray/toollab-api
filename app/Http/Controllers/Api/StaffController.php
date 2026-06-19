@@ -154,13 +154,16 @@ class StaffController extends Controller
                 }
             }
 
-            // Nouvel utilisateur : invitation classique (activation du compte + mot de passe).
+            // Nouvel utilisateur : invitation classique (activation du compte + mot de
+            // passe). Le token porte le school_id : activer le compte via ce lien vaut
+            // acceptation explicite de CETTE école.
             if (!$existingUser) {
                 $token = Str::random(64);
 
                 InvitationToken::create([
                     'email' => $user->email,
                     'token' => $token,
+                    'school_id' => $school->id,
                     'expires_at' => now()->addDays(7),
                 ]);
 
@@ -174,19 +177,12 @@ class StaffController extends Controller
             }
 
             // Utilisateur existant qui n'a pas encore accepté pour cette école :
-            // on (re)génère un token lié à l'école et on envoie une invitation à accepter.
+            // il devra accepter explicitement depuis l'application (bandeau d'invitations).
+            // L'email n'est qu'une notification l'invitant à se connecter.
             if (!$alreadyAccepted) {
-                $token = Str::random(64);
-
-                InvitationToken::updateOrCreate(
-                    ['email' => $user->email, 'school_id' => $school->id],
-                    ['token' => $token, 'expires_at' => now()->addDays(7)]
-                );
-
                 $user->notify(new SchoolInvitationNotification(
                     $school->name,
-                    $this->roleNamesFromSlugs($roleSlugs),
-                    $token
+                    $this->roleNamesFromSlugs($roleSlugs)
                 ));
 
                 return [$user, 'Invitation envoyée. Le nom de l\'utilisateur sera visible après son acceptation.', $createdRoleSlugs];

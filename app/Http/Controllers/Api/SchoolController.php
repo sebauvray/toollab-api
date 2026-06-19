@@ -29,8 +29,11 @@ class SchoolController extends Controller
             return School::orderBy('name')->get();
         }
 
+        // Seules les adhésions acceptées donnent accès à l'école (les invitations
+        // en attente n'apparaissent pas tant qu'elles ne sont pas acceptées).
         $direct = \App\Models\UserRole::where('user_id', $user->id)
             ->where('roleable_type', 'school')
+            ->whereNotNull('accepted_at')
             ->pluck('roleable_id');
 
         $familyRoleIds = \App\Models\UserRole::where('user_id', $user->id)
@@ -132,6 +135,7 @@ class SchoolController extends Controller
                 InvitationToken::create([
                     'email' => $director->email,
                     'token' => $token,
+                    'school_id' => $school->id,
                     'expires_at' => now()->addDays(7),
                 ]);
 
