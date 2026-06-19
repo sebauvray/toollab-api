@@ -15,17 +15,17 @@ class StaffInvitation extends Notification implements ShouldQueue
     public array $backoff = [60, 300, 900];
 
     private $schoolName;
-    private $roleName;
+    private array $roleNames;
     private $token;
     private $frontendUrl;
 
     /**
      * Create a new notification instance.
      */
-    public function __construct(string $schoolName, string $roleName, string $token)
+    public function __construct(string $schoolName, string|array $roleNames, string $token)
     {
         $this->schoolName = $schoolName;
-        $this->roleName = $roleName;
+        $this->roleNames = is_array($roleNames) ? array_values($roleNames) : [$roleNames];
         $this->token = $token;
         $this->frontendUrl = config('app.frontend_url', 'http://localhost:3000');
         $this->afterCommit = true;
@@ -53,7 +53,8 @@ class StaffInvitation extends Notification implements ShouldQueue
             ->view('emails.staff-invitation', [
                 'actionUrl' => $url,
                 'schoolName' => $this->schoolName,
-                'roleName' => $this->roleName,
+                'roleName' => $this->roleNames[0] ?? '',
+                'roleNames' => $this->roleNames,
                 'notifiable' => $notifiable
             ]);
     }
@@ -67,7 +68,7 @@ class StaffInvitation extends Notification implements ShouldQueue
     {
         return [
             'school_name' => $this->schoolName,
-            'role_name' => $this->roleName,
+            'role_names' => $this->roleNames,
             'invitation_token' => $this->token,
         ];
     }

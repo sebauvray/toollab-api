@@ -10,8 +10,16 @@ class StaffRequest extends FormRequest
 {
     public function authorize()
     {
+        if (auth()->user()?->is_super_admin) {
+            return true;
+        }
+
         $schoolId = $this->input('school_id');
-        $requestedRole = $this->input('role');
+        $requestedRoles = $this->input('roles', [$this->input('role')]);
+        if (!is_array($requestedRoles)) {
+            $requestedRoles = [$this->input('role')];
+        }
+        $requestedRoles = array_values(array_filter(array_unique($requestedRoles)));
 
         $userRoles = auth()->user()->roles()
             ->whereIn('role_id', function ($query) {
@@ -29,7 +37,17 @@ class StaffRequest extends FormRequest
             return true;
         }
 
-        return in_array($requestedRole, ['registar', 'teacher'], true) && $userRoles->contains('admin');
+        if (!$userRoles->contains('admin')) {
+            return false;
+        }
+
+        foreach ($requestedRoles as $requestedRole) {
+            if (!in_array($requestedRole, ['registar', 'teacher'], true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function rules()
@@ -39,6 +57,8 @@ class StaffRequest extends FormRequest
             'last_name' => 'required|string',
             'email' => 'required|email',
             'role' => 'required|in:admin,registar,teacher',
+            'roles' => 'sometimes|array|min:1',
+            'roles.*' => 'required|in:admin,registar,teacher|distinct',
             'school_id' => 'required|exists:schools,id',
         ];
     }

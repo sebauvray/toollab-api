@@ -72,7 +72,19 @@
     <div class="content">
         <h2>Invitation à rejoindre l'équipe</h2>
         <p>Bonjour {{ $notifiable->first_name }} {{ $notifiable->last_name }},</p>
-        <p>Vous avez été invité(e) à rejoindre l'équipe de <strong>{{ $schoolName }}</strong> en tant que <strong>{{ $roleName }}</strong>.</p>
+        <p>Vous avez été invité(e) à rejoindre l'équipe de <strong>{{ $schoolName }}</strong>.</p>
+        @if(!empty($roleNames) && count($roleNames) > 1)
+            <p>Les rôles qui vous ont été attribués sont :</p>
+            <ul>
+                @foreach($roleNames as $role)
+                    <li><strong>{{ $role }}</strong></li>
+                @endforeach
+            </ul>
+        @elseif(!empty($roleName))
+            <p>Le rôle qui vous a été attribué est : <strong>{{ $roleName }}</strong>.</p>
+        @else
+            <p>Un accès à cet établissement vous a été attribué.</p>
+        @endif
         <p>Pour accéder à votre compte, veuillez définir votre mot de passe en cliquant sur le bouton ci-dessous.</p>
         <p><a href="{{ $actionUrl }}" class="button"  style="color: white">Définir mon mot de passe</a></p>
         <p>Ce lien d'invitation expirera dans 7 jours.</p>
