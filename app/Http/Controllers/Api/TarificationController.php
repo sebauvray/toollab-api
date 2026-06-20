@@ -96,8 +96,8 @@ class TarificationController extends Controller
             'prix' => 'required|integer|min:1'
         ]);
 
-        DB::transaction(function () use ($cursus, $request) {
-            Tarif::updateOrCreate(
+        $tarif = DB::transaction(function () use ($cursus, $request) {
+            return Tarif::updateOrCreate(
                 ['cursus_id' => $cursus->id],
                 ['prix' => $request->prix, 'actif' => true]
             );
@@ -107,7 +107,7 @@ class TarificationController extends Controller
             'status' => 'success',
             'message' => 'Tarif mis à jour avec succès',
             'data' => [
-                'tarif' => $cursus->tarif
+                'tarif' => $tarif->fresh()
             ]
         ], 200);
     }
@@ -164,7 +164,10 @@ class TarificationController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Réduction familiale mise à jour avec succès'
+            'message' => 'Réduction familiale mise à jour avec succès',
+            'data' => [
+                'reduction' => $reduction->fresh()
+            ]
         ]);
     }
 
@@ -257,7 +260,10 @@ class TarificationController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Réduction multi-cursus mise à jour avec succès'
+            'message' => 'Réduction multi-cursus mise à jour avec succès',
+            'data' => [
+                'reduction' => $reduction->fresh(['cursusRequis'])
+            ]
         ]);
     }
 
@@ -316,4 +322,5 @@ class TarificationController extends Controller
             })
             ->exists();
     }
+
 }
