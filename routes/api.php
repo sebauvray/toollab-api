@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
 use App\Http\Controllers\Api\FamilyController;
+use App\Http\Controllers\Api\FamilyImportController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\SchoolController;
@@ -99,7 +100,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::put('/users/{user}/info', [UserController::class, 'updateUserInfo'])->whereNumber('user');
 
             Route::prefix('families')->group(function () {
-                Route::middleware('checkrole:director,admin')->get('/export', [FamilyController::class, 'exportStudents']);
+                Route::middleware('checkrole:director,admin')->group(function () {
+                    Route::get('/export', [FamilyController::class, 'exportStudents']);
+                    Route::get('/import-template', [FamilyImportController::class, 'template']);
+                    Route::post('/import', [FamilyImportController::class, 'import']);
+                });
                 Route::get('/', [FamilyController::class, 'index']);
                 Route::post('/', [FamilyController::class, 'store']);
                 Route::get('/{family}', [FamilyController::class, 'show']);
