@@ -428,6 +428,7 @@ class FamilyImportService
     {
         $responsibleRole = Role::where('slug', 'responsible')->firstOrFail();
         $studentRole = Role::where('slug', 'student')->firstOrFail();
+        $generatedPasswordHash = Hash::make(str()->random(32));
 
         $summary = [
             'families' => 0,
@@ -436,24 +437,24 @@ class FamilyImportService
             'responsibles_reused' => 0,
         ];
 
-        DB::transaction(function () use ($families, $responsibleRole, $studentRole, &$summary) {
+        DB::transaction(function () use ($families, $responsibleRole, $studentRole, $generatedPasswordHash, &$summary) {
             foreach ($families as $data) {
                 $family = Family::create();
                 $summary['families']++;
 
                 foreach ($data['responsibles'] as $resp) {
-                    $reused = $this->attachResponsible($family, $resp, $responsibleRole->id);
+                    $reused = $this->attachResponsible($family, $resp, $responsibleRole->id, $generatedPasswordHash);
                     $summary[$reused ? 'responsibles_reused' : 'responsibles_created']++;
                 }
 
                 foreach ($data['adults'] as $adult) {
-                    $reused = $this->persistAdultStudent($family, $adult, $responsibleRole->id, $studentRole->id);
+                    $reused = $this->persistAdultStudent($family, $adult, $responsibleRole->id, $studentRole->id, $generatedPasswordHash);
                     $summary[$reused ? 'responsibles_reused' : 'responsibles_created']++;
                     $summary['students']++;
                 }
 
                 foreach ($data['students'] as $student) {
-                    $this->createStudent($family, $student, $studentRole->id);
+                    $this->createStudent($family, $student, $studentRole->id, $generatedPasswordHash);
                     $summary['students']++;
                 }
             }
@@ -469,7 +470,7 @@ class FamilyImportService
      * @param  array<string, mixed>  $adult
      * @return bool  true si l'utilisateur existait déjà (réutilisé)
      */
-    private function persistAdultStudent(Family $family, array $adult, int $responsibleRoleId, int $studentRoleId): bool
+    private function persistAdultStudent(Family $family, array $adult, int $responsibleRoleId, int $studentRoleId, string $generatedPasswordHash): bool
     {
         $user = User::where('email', $adult['email'])->first();
         $reused = $user !== null;
@@ -479,7 +480,7 @@ class FamilyImportService
                 'first_name' => $adult['first_name'],
                 'last_name' => $adult['last_name'],
                 'email' => $adult['email'],
-                'password' => Hash::make(str()->random(16)),
+                'password' => $generatedPasswordHash,
                 'access' => true,
             ]);
 
@@ -508,7 +509,7 @@ class FamilyImportService
      * @param  array<string, string>  $fields
      * @return bool  true si l'utilisateur existait déjà (réutilisé)
      */
-    private function attachResponsible(Family $family, array $fields, int $roleId): bool
+    private function attachResponsible(Family $family, array $fields, int $roleId, string $generatedPasswordHash): bool
     {
         $user = User::where('email', $fields['email'])->first();
         $reused = $user !== null;
@@ -518,7 +519,7 @@ class FamilyImportService
                 'first_name' => $fields['first_name'],
                 'last_name' => $fields['last_name'],
                 'email' => $fields['email'],
-                'password' => Hash::make(str()->random(16)),
+                'password' => $generatedPasswordHash,
                 'access' => true,
             ]);
 
@@ -544,7 +545,7 @@ class FamilyImportService
     /**
      * @param  array<string, mixed>  $student
      */
-    private function createStudent(Family $family, array $student, int $roleId): void
+    private function createStudent(Family $family, array $student, int $roleId, string $generatedPasswordHash): void
     {
         $email = strtolower(
             $this->slug($student['first_name']).'.'.$this->slug($student['last_name'])
@@ -555,7 +556,7 @@ class FamilyImportService
             'first_name' => $student['first_name'],
             'last_name' => $student['last_name'],
             'email' => $email,
-            'password' => Hash::make(str()->random(16)),
+            'password' => $generatedPasswordHash,
             'access' => true,
         ]);
 
