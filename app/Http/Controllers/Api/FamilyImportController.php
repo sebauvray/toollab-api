@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessFamilyImportJob;
+use App\Models\FamilyImport;
 use App\Services\ExportService;
-use App\Services\FamilyImportService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class FamilyImportController extends Controller
 {
@@ -78,7 +80,7 @@ class FamilyImportController extends Controller
     /**
      * Importe un fichier .xlsx/.csv d'élèves et responsables.
      */
-    public function import(Request $request, FamilyImportService $service)
+    public function import(Request $request)
     {
         $request->validate([
             'file' => 'required|file|max:10240',
@@ -98,27 +100,50 @@ class FamilyImportController extends Controller
             ], 422);
         }
 
-        $report = $service->import($upload->getRealPath(), $upload->getClientOriginalName());
+        $storedPath = $upload->storeAs(
+            'family-imports',
+            Str::uuid()->toString().'.'.$extension,
+            'local'
+        );
 
-        if (! ($report['ok'] ?? false)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Le fichier contient des erreurs. Aucun élève n\'a été importé.',
-                'errors' => $report['errors'] ?? [],
-            ], 422);
+        $import = FamilyImport::query()->create([
+            'school_id' => currentSchoolId(),
+            'school_year_id' => currentSchoolYearId(),
+            'user_id' => $request->user()?->id,
+            'original_filename' => $upload->getClientOriginalName(),
+            'stored_path' => $storedPath,
+            'status' => 'pending',
+            'message' => 'Import en attente de traitement.',
+        ]);
+
+        ProcessFamilyImportJob::dispatch($import->id);
+
+        return response()->json($this->serializeImport($import), 202);
+    }
+
+    public function show(FamilyImport $familyImport)
+    {
+        if ($familyImport->school_id !== currentSchoolId()) {
+            return response()->json(['message' => 'Import introuvable.'], 404);
         }
 
-        $s = $report['summary'];
+        return response()->json($this->serializeImport($familyImport));
+    }
 
-        return response()->json([
-            'status' => 'success',
-            'message' => sprintf(
-                '%d famille(s), %d élève(s) et %d responsable(s) importés.',
-                $s['families'],
-                $s['students'],
-                $s['responsibles_created'] + $s['responsibles_reused']
-            ),
-            'summary' => $s,
-        ]);
+    private function serializeImport(FamilyImport $import): array
+    {
+        return [
+            'id' => $import->id,
+            'status' => $import->status,
+            'message' => $import->message,
+            'summary' => $import->summary,
+            'errors' => $import->errors ?? [],
+            'error_count' => $import->error_count,
+            'errors_truncated' => $import->errors_truncated,
+            'errors_limit' => $import->errors_limit,
+            'created_at' => $import->created_at,
+            'started_at' => $import->started_at,
+            'finished_at' => $import->finished_at,
+        ];
     }
 }

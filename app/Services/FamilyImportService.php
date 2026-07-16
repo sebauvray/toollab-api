@@ -27,6 +27,7 @@ use OpenSpout\Reader\XLSX\Reader as XlsxReader;
 class FamilyImportService
 {
     private const MAX_DATA_ROWS = 5000;
+    private const MAX_RETURNED_ERRORS = 200;
 
     // Index de colonne (0-based) => libellé affiché dans les erreurs.
     private const COLS = [
@@ -123,7 +124,7 @@ class FamilyImportService
         $families = $this->buildFamilies($rows);
 
         if (! empty($this->errors)) {
-            return ['ok' => false, 'errors' => $this->sortedErrors()];
+            return array_merge(['ok' => false], $this->errorPayload());
         }
 
         if (empty($families)) {
@@ -140,7 +141,7 @@ class FamilyImportService
         $this->validateNoExistingStudents($families);
 
         if (! empty($this->errors)) {
-            return ['ok' => false, 'errors' => $this->sortedErrors()];
+            return array_merge(['ok' => false], $this->errorPayload());
         }
 
         return $this->persist($families);
@@ -696,6 +697,18 @@ class FamilyImportService
         $errors = $this->errors;
         usort($errors, fn ($a, $b) => [$a['row'], $a['cell']] <=> [$b['row'], $b['cell']]);
 
-        return array_slice($errors, 0, 200);
+        return array_slice($errors, 0, self::MAX_RETURNED_ERRORS);
+    }
+
+    private function errorPayload(): array
+    {
+        $errorCount = count($this->errors);
+
+        return [
+            'errors' => $this->sortedErrors(),
+            'error_count' => $errorCount,
+            'errors_truncated' => $errorCount > self::MAX_RETURNED_ERRORS,
+            'errors_limit' => self::MAX_RETURNED_ERRORS,
+        ];
     }
 }

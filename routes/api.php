@@ -104,6 +104,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                     Route::get('/export', [FamilyController::class, 'exportStudents']);
                     Route::get('/import-template', [FamilyImportController::class, 'template']);
                     Route::post('/import', [FamilyImportController::class, 'import']);
+                    Route::get('/imports/{familyImport}', [FamilyImportController::class, 'show'])->whereNumber('familyImport');
                 });
                 Route::get('/', [FamilyController::class, 'index']);
                 Route::post('/', [FamilyController::class, 'store']);

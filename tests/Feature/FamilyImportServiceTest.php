@@ -1,6 +1,8 @@
 <?php
 
+use App\Jobs\ProcessFamilyImportJob;
 use App\Models\Family;
+use App\Models\FamilyImport;
 use App\Models\Role;
 use App\Models\School;
 use App\Models\User;
@@ -9,6 +11,7 @@ use App\Models\UserRole;
 use App\Services\FamilyImportService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -262,4 +265,68 @@ it('applique le tout-ou-rien : une ligne invalide annule tout le fichier', funct
     expect($report['ok'])->toBeFalse();
     expect(Family::count())->toBe(0);
     expect(User::count())->toBe(0);
+});
+
+it('traite un import valide via le job', function () {
+    Storage::fake('local');
+
+    $storedPath = 'family-imports/test-valid.csv';
+    Storage::disk('local')->put($storedPath, file_get_contents(makeCsv([
+        array_merge(['FAM001', 'Benali', 'Yasmine', '2015-03-12', 'F'], resp1()),
+    ])));
+
+    $import = FamilyImport::query()->create([
+        'school_id' => $this->school->id,
+        'school_year_id' => null,
+        'user_id' => null,
+        'original_filename' => 'test-valid.csv',
+        'stored_path' => $storedPath,
+        'status' => 'pending',
+    ]);
+
+    (new ProcessFamilyImportJob($import->id))->handle(new FamilyImportService());
+
+    $import->refresh();
+    expect($import->status)->toBe('completed');
+    expect($import->summary['families'])->toBe(1);
+    expect($import->summary['students'])->toBe(1);
+    expect(Family::count())->toBe(1);
+});
+
+it('marque un import en erreur via le job sans importer de doublon', function () {
+    Storage::fake('local');
+
+    $studentRole = Role::where('slug', 'student')->first();
+    $family = Family::create();
+    $existing = User::create([
+        'first_name' => 'Yasmine',
+        'last_name' => 'Benali',
+        'email' => 'yasmine.benali.existing@school.com',
+        'password' => bcrypt('secret'),
+        'access' => true,
+    ]);
+    UserInfo::create(['user_id' => $existing->id, 'key' => 'birthdate', 'value' => '2015-03-12']);
+    $family->userRoles()->create(['user_id' => $existing->id, 'role_id' => $studentRole->id]);
+
+    $storedPath = 'family-imports/test-duplicate.csv';
+    Storage::disk('local')->put($storedPath, file_get_contents(makeCsv([
+        array_merge(['FAM001', 'Benali', 'Yasmine', '2015-03-12', 'F'], resp1()),
+    ])));
+
+    $import = FamilyImport::query()->create([
+        'school_id' => $this->school->id,
+        'school_year_id' => null,
+        'user_id' => null,
+        'original_filename' => 'test-duplicate.csv',
+        'stored_path' => $storedPath,
+        'status' => 'pending',
+    ]);
+
+    (new ProcessFamilyImportJob($import->id))->handle(new FamilyImportService());
+
+    $import->refresh();
+    expect($import->status)->toBe('failed');
+    expect($import->error_count)->toBe(1);
+    expect(collect($import->errors)->pluck('message')->implode(' '))->toContain('existe déjà');
+    expect(Family::count())->toBe(1);
 });
