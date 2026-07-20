@@ -71,6 +71,12 @@ COPY docker/php/generate-supervisord-conf.sh /usr/local/bin/generate-supervisord
 RUN chmod +x /usr/local/bin/generate-supervisord-conf.sh \
     && /usr/local/bin/generate-supervisord-conf.sh /etc/supervisord.conf $CURRENT_USER
 
+# Le pool php-fpm doit tourner sous le même user que les workers ($CURRENT_USER)
+# et non le www-data par défaut de l'image : ainsi un fichier uploadé par une
+# requête web (ex. import xlsx) est lisible ET supprimable par le worker queue
+# qui le traite. Le master fpm reste root (lancé par supervisord).
+RUN sed -ri "s/^user = www-data/user = ${CURRENT_USER}/; s/^group = www-data/group = ${CURRENT_USER}/" /usr/local/etc/php-fpm.d/www.conf
+
 # Code applicatif (le .dockerignore exclut .env, vendor, node_modules, .git…)
 COPY . .
 # Dépendances pré-installées depuis le stage vendor
