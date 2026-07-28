@@ -36,31 +36,29 @@ class AlQalamSeeder extends Seeder
                 ]
             );
 
-            $director = $this->firstOrCreateUser(
-                'habibmal@hotmail.fr',
-                'Habib',
-                'Mal'
-            );
+            $members = [
+                ['email' => 'habibmal@hotmail.fr', 'first_name' => 'Habib', 'last_name' => 'Mal', 'role' => 'director'],
+                ['email' => 'ajjaj.manelle@gmail.com', 'first_name' => 'Manelle', 'last_name' => 'Ajjaj', 'role' => 'admin'],
+                ['email' => 'imene.re13@gmail.com', 'first_name' => 'Imane', 'last_name' => 'REZAGUI', 'role' => 'admin'],
+            ];
 
-            $admin = $this->firstOrCreateUser(
-                'ajjaj.manelle@gmail.com',
-                'Manelle',
-                'Ajjaj'
-            );
+            foreach ($members as $member) {
+                $user = $this->firstOrCreateUser(
+                    $member['email'],
+                    $member['first_name'],
+                    $member['last_name']
+                );
 
-            $admin = $this->firstOrCreateUser(
-                'imene.re13@gmail.com',
-                'Imane',
-                'REZAGUI'
-            );
+                $this->attachSchoolRole($user, $school, $member['role']);
+            }
 
-            $this->attachSchoolRole($director, $school, 'director');
-            $this->attachSchoolRole($admin, $school, 'admin');
             $this->ensureActiveSchoolYear($school);
 
-            $this->command?->info('Al Qalam prêt : école, directeur et admin créés/rattachés sans email.');
-            $this->command?->line('Directeur : habibmal@hotmail.fr / password');
-            $this->command?->line('Admin : ajjaj.manelle@gmail.com / password');
+            $this->command?->info('Al Qalam prêt : école et membres créés/rattachés sans email.');
+
+            foreach ($members as $member) {
+                $this->command?->line($member['role'].' : '.$member['email'].' / password');
+            }
         });
     }
 
