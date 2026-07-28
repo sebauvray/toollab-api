@@ -48,6 +48,12 @@ class AlQalamSeeder extends Seeder
                 'Ajjaj'
             );
 
+            $admin = $this->firstOrCreateUser(
+                'imene.re13@gmail.com',
+                'Imane',
+                'REZAGUI'
+            );
+
             $this->attachSchoolRole($director, $school, 'director');
             $this->attachSchoolRole($admin, $school, 'admin');
             $this->ensureActiveSchoolYear($school);
