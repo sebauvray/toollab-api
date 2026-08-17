@@ -5,11 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use App\Models\Scopes\VisibleUntilYearClosedScope;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class UserRole extends Model
 {
-    use TrackChangesTrait;
+    use TrackChangesTrait, SoftDeletes;
+
+    /**
+     * Même règle que Family : les rattachements coupés aujourd'hui restent
+     * visibles dans les années déjà clôturées, sinon la fiche d'une famille
+     * consultée en archive s'afficherait sans ses membres.
+     */
+    public static function bootSoftDeletes(): void
+    {
+        static::addGlobalScope(new VisibleUntilYearClosedScope);
+    }
 
     protected $fillable = [
         'user_id',

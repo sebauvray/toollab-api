@@ -44,7 +44,10 @@ class Classroom extends Model
     {
         return $this->belongsToMany(User::class, 'student_classrooms', 'classroom_id', 'student_id')
             ->withPivot('family_id', 'status', 'enrollment_date')
-            ->withTimestamps();
+            ->withTimestamps()
+            // Sans ce filtre, les inscriptions d'une famille supprimée continueraient
+            // de compter dans student_count et de bloquer des places.
+            ->wherePivotNull('deleted_at');
     }
 
     public function activeStudents()

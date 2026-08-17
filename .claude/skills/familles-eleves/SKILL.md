@@ -54,8 +54,58 @@ Tous sous `school` + `schoolyear` (donc **écriture bloquée en 409** sur année
 | `GET /families/{family}/enrollments` | inscriptions actives par élève |
 | `GET /families/export` | `checkrole:director,admin` — 1 ligne par élève |
 | `GET/POST /families/import*` | `checkrole:director,admin` — skill `import-familles` |
+| `GET /families/{family}/deletion-preview` | `checkrole:director,admin` — chiffres + `can_delete` + `blockers` |
+| `DELETE /families/{family}` | `checkrole:director,admin` — suppression réversible, **409 si la famille a de l'activité** |
+| `GET /families/trashed` | `checkrole:director,admin` — corbeille **de l'année consultée** ; déclarée **avant** `/{family}` |
+| `POST /families/{familyId}/restore` | `checkrole:director,admin` |
 
 `findOrCreateResponsibleUser()` **réutilise systématiquement** un `User` existant par email : un parent présent dans plusieurs écoles n'est jamais dupliqué.
+
+## 3 bis. Supprimer une famille
+
+`FamilyDeletionController`. Supprimer = **couper les rattachements à l'école**, pas détruire des personnes. Quatre ensembles passent en soft delete avec le **même `deleted_at`** (ce qui permet à `restore()` de ne ressusciter que ces lignes-là) : la famille, les `user_roles` de contexte `family`, les `student_classrooms` de l'**année courante**, et les `user_roles` de contexte `classroom` correspondants.
+
+Restent intacts : les `users` (comptes partageables entre écoles), `paiements` / `lignes_paiement`, `comments`.
+
+### Les garde-fous — `deletionBlockers()`
+
+La suppression est **refusée en 409** tant que la famille porte de l'activité sur l'**année courante** :
+
+| Code | Condition |
+|---|---|
+| `enrollments` | au moins une `student_classrooms` de statut `active` |
+| `payments` | au moins une `lignes_paiement` rattachée au `Paiement` de l'année |
+
+Le payload du 409 et celui de `deletion-preview` portent la même structure `blockers: [{code, label}]`, `label` étant directement affichable. `preview` ajoute `can_delete`.
+
+Conséquences à connaître :
+- **Le parcours obligatoire est : désinscrire → retirer les règlements → supprimer.** `DeleteFamilyModal` affiche les motifs et deux raccourcis (`/family/{id}/classes`, `/family/{id}/paiement`) au lieu du bouton rouge.
+- **La suppression ne libère plus jamais une place** : la désinscription l'a déjà fait.
+- **La restauration ne réinscrit pas** : les inscriptions reviennent inactives, donc elle ne peut plus faire dépasser la capacité d'une classe.
+- La portée « année courante » vient des global scopes (`StudentClassroom` et `Paiement` portent `BelongsToSchoolYear`) : une activité entièrement archivée **ne bloque pas**.
+
+### Visibilité en archive
+
+`VisibleUntilYearClosedScope` (sur `Family` **et** `UserRole`, plus les 7 relations pivot via `visibleRolesFilter()`) rend une famille supprimée à nouveau visible dans toute année **déjà clôturée au moment de la suppression** — règle `deleted_at > année.closed_at`. Sur une année active, il se réduit exactement au soft delete standard.
+
+### La corbeille est bornée à l'année consultée
+
+`families` n'a **pas** de `school_year_id` — une famille traverse les années, comme un cursus. Le rattachement à une année se fait donc sur la **date de suppression** : `trashed()` borne `deleted_at` par `[opened_at, closed_at]` de l'année courante (`opened_at` étant nullable sur les années backfillées, fallback sur `created_at`).
+
+Sans cette borne, la corbeille cumulait toutes les suppressions depuis la création de l'école, et une famille supprimée après la clôture d'une année apparaissait **à la fois** dans la liste de cette année (ressuscitée par `VisibleUntilYearClosedScope`) et dans sa corbeille.
+
+⚠ **Conséquence assumée** : une famille supprimée pendant une année désormais close n'est plus restaurable. La fenêtre pour revenir en arrière, c'est l'année en cours.
+
+`trashed()` **ne pose aucun LIMIT** : une troncature muette laisserait croire à une liste complète. Le coût est tenu par `trashedFamilyNames()`, version batch de `familyName()` qui résout tous les noms en **3 requêtes quel que soit le volume** (mesuré : 300 familles → 10 requêtes au total, 61 ms, 25 ko ; contre 208 requêtes pour 100 familles avant). Un test verrouille les deux (`renvoie toute la corbeille sans plafond ni N+1`).
+
+Côté front : bouton **Corbeille** sur `/family`, `v-if="canPilot && !isReadOnly"` — **masqué sur une année clôturée**, où `restore` (un POST) serait de toute façon refusé en 409 par le middleware `schoolyear`. Il ouvre `TrashedFamiliesModal` :
+
+- liste **scrollable** (panneau `max-h-[88vh] flex flex-col`, corps `flex-1 overflow-y-auto`, en-tête/pied `shrink-0`) ;
+- **barre de recherche** placée **hors** de la zone scrollable, donc toujours visible ; filtrage **en mémoire** (l'API renvoie tout, pas d'aller-retour par frappe), insensible à la casse **et aux accents** (`normalize('NFD')`) ;
+- compteur en pied : « 60 familles », ou « 7 sur 60 » quand un filtre est actif ;
+- bouton **Restaurer** par ligne, une seule restauration à la fois (`restoringId`). La modale émet `restored`, la page recharge sa page courante pour que la famille réapparaisse sans la fermer.
+
+Couverture : `FamilyDeletionTest` (28) + `FamilyDeletionHttpTest` (26).
 
 ## 4. Statut de règlement (champ `status`)
 

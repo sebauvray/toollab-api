@@ -477,6 +477,9 @@ class ClassroomController extends Controller
 
             $enrollment->delete();
 
+            // La décision de fin d'année suit l'inscription.
+            StudentYearOutcome::forgetForEnrollments([(int) $studentId], [(int) $classroomId]);
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'L\'élève a été retiré de la classe avec succès'

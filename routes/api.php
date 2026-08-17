@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
 use App\Http\Controllers\Api\FamilyController;
+use App\Http\Controllers\Api\FamilyDeletionController;
 use App\Http\Controllers\Api\FamilyImportController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\ScheduleController;
@@ -105,6 +106,14 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                     Route::get('/import-template', [FamilyImportController::class, 'template']);
                     Route::post('/import', [FamilyImportController::class, 'import']);
                     Route::get('/imports/{familyImport}', [FamilyImportController::class, 'show'])->whereNumber('familyImport');
+
+                    // Suppression réversible. /trashed est déclarée avant /{family}
+                    // pour que le segment littéral ne soit pas capté par le binding.
+                    Route::get('/trashed', [FamilyDeletionController::class, 'trashed']);
+                    Route::get('/{family}/deletion-preview', [FamilyDeletionController::class, 'preview'])->whereNumber('family');
+                    Route::delete('/{family}', [FamilyDeletionController::class, 'destroy'])->whereNumber('family');
+                    Route::post('/{familyId}/restore', [FamilyDeletionController::class, 'restore'])->whereNumber('familyId');
+                    Route::post('/{familyId}/purge', [FamilyDeletionController::class, 'purge'])->whereNumber('familyId');
                 });
                 Route::get('/', [FamilyController::class, 'index']);
                 Route::post('/', [FamilyController::class, 'store']);

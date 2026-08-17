@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\UserInfo;
 use App\Models\UserRole;
 use App\Models\StudentClassroom;
+use App\Models\StudentYearOutcome;
 use App\Traits\PaginationTrait;
 use App\Services\PaiementService;
 use App\Services\ExportService;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class FamilyController extends Controller
 {
@@ -726,24 +728,69 @@ class FamilyController extends Controller
         if (!self::callerCanAccessFamily($family)) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
 
-        DB::beginTransaction();
+        $now = now();
 
         try {
-            DB::table('user_infos')->where('user_id', $student->id)->delete();
-            DB::table('user_roles')->where('user_id', $student->id)->delete();
-            $student->delete();
+            DB::transaction(function () use ($family, $student, $now) {
+                // Inscriptions de l'ANNÉE COURANTE uniquement : le global scope
+                // BelongsToSchoolYear s'en charge. Celles des années clôturées
+                // sont de l'historique — les couper effacerait rétroactivement
+                // un élève d'une classe où il était bien présent.
+                $enrollments = StudentClassroom::query()
+                    ->where('family_id', $family->id)
+                    ->where('student_id', $student->id)
+                    ->get(['id', 'classroom_id']);
 
-            DB::commit();
+                if ($enrollments->isNotEmpty()) {
+                    UserRole::query()
+                        ->where('user_id', $student->id)
+                        ->where('roleable_type', 'classroom')
+                        ->whereIn('roleable_id', $enrollments->pluck('classroom_id')->unique())
+                        ->update(['deleted_at' => $now]);
 
-            return response()->json(['message' => 'Élève et données associées supprimés avec succès.']);
-        } catch (\Exception $e) {
-            DB::rollBack();
+                    StudentClassroom::query()
+                        ->whereIn('id', $enrollments->pluck('id'))
+                        ->update(['deleted_at' => $now]);
+
+                    // La décision de fin d'année suit l'inscription.
+                    StudentYearOutcome::forgetForEnrollments(
+                        [$student->id],
+                        $enrollments->pluck('classroom_id')->unique()->all()
+                    );
+                }
+
+                // Rattachement à CETTE famille seulement. Un même compte peut
+                // être élève ailleurs, ou responsable de cette même famille :
+                // ces rôles-là ne sont pas concernés.
+                UserRole::query()
+                    ->where('user_id', $student->id)
+                    ->where('roleable_type', 'family')
+                    ->where('roleable_id', $family->id)
+                    ->whereHas('role', fn ($q) => $q->where('slug', 'student'))
+                    ->update(['deleted_at' => $now]);
+            });
+        } catch (\Throwable $e) {
+            Log::error('FamilyController.deleteStudent failed', [
+                'family_id' => $family->id,
+                'student_id' => $student->id,
+                'caller_id' => auth()->id(),
+                'exception' => $e->getMessage(),
+            ]);
 
             return response()->json([
                 'message' => 'Une erreur est survenue lors de la suppression.',
                 'error' => 'Une erreur est survenue'
             ], 500);
         }
+
+        Log::info('FamilyController.deleteStudent: student detached', [
+            'family_id' => $family->id,
+            'student_id' => $student->id,
+            'caller_id' => auth()->id(),
+            'deleted_at' => $now->toDateTimeString(),
+        ]);
+
+        return response()->json(['message' => 'Élève retiré de la famille.']);
     }
 
     public function addResponsible(Request $request, Family $family)
@@ -1057,7 +1104,10 @@ class FamilyController extends Controller
 
     private function isUserResponsible($userId, $familyId)
     {
+        // DB::table court-circuite Eloquent : le global scope SoftDeletes du modèle
+        // UserRole ne s'applique pas, on filtre explicitement.
         return DB::table('user_roles')
+            ->whereNull('deleted_at')
             ->where('user_id', $userId)
             ->where('roleable_id', $familyId)
             ->where('roleable_type', 'family')
@@ -1072,7 +1122,9 @@ class FamilyController extends Controller
 
     private function isUserStudent($userId, $familyId)
     {
+        // Idem isUserResponsible : requête brute, filtrage manuel des lignes supprimées.
         return DB::table('user_roles')
+            ->whereNull('deleted_at')
             ->where('user_id', $userId)
             ->where('roleable_id', $familyId)
             ->where('roleable_type', 'family')

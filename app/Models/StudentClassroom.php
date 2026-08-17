@@ -6,10 +6,11 @@ use App\Traits\BelongsToSchoolYear;
 use App\Traits\TrackChangesTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class StudentClassroom extends Model
 {
-    use HasFactory, TrackChangesTrait, BelongsToSchoolYear;
+    use HasFactory, TrackChangesTrait, BelongsToSchoolYear, SoftDeletes;
 
     protected $fillable = [
         'student_id',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\FamilyController;
 use App\Models\StudentClassroom;
+use App\Models\StudentYearOutcome;
 use App\Models\Classroom;
 use App\Models\Family;
 use App\Models\User;
@@ -12,6 +13,7 @@ use App\Models\Role;
 use App\Models\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class StudentClassroomController extends Controller
 {
@@ -60,11 +62,16 @@ class StudentClassroomController extends Controller
                 ], 400);
             }
 
-            $existingEnrollment = StudentClassroom::where('student_id', $request->student_id)
+            // withTrashed : une inscription supprimée (famille mise à la corbeille,
+            // ou changement de classe) occupe toujours l'index
+            // UNIQUE(student_id, classroom_id). Sans ce filet, le create() plus bas
+            // se cognerait à un doublon SQL au lieu de réutiliser la ligne.
+            $existingEnrollment = StudentClassroom::withTrashed()
+                ->where('student_id', $request->student_id)
                 ->where('classroom_id', $request->classroom_id)
                 ->first();
 
-            if ($existingEnrollment) {
+            if ($existingEnrollment && ! $existingEnrollment->trashed()) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'L\'élève est déjà inscrit dans cette classe'
@@ -90,18 +97,32 @@ class StudentClassroomController extends Controller
 
             $snapshot = $this->buildTarifSnapshot($classroom);
 
-            $enrollment = StudentClassroom::create([
+            $enrollmentData = [
                 'student_id' => $request->student_id,
                 'classroom_id' => $request->classroom_id,
                 'family_id' => $request->family_id,
                 'status' => 'active',
                 'enrollment_date' => now(),
                 'tarif_snapshot' => $snapshot,
-            ]);
+            ];
+
+            if ($existingEnrollment) {
+                // Ligne supprimée réutilisée : on la ressuscite et on la remet à
+                // jour (nouvelle famille, nouveau snapshot tarifaire).
+                $existingEnrollment->restore();
+                $existingEnrollment->update($enrollmentData);
+                $enrollment = $existingEnrollment;
+            } else {
+                $enrollment = StudentClassroom::create($enrollmentData);
+            }
 
             $studentRole = Role::where('slug', 'student')->first();
             if ($studentRole) {
-                $existingClassroomRole = UserRole::where('user_id', $student->id)
+                // withTrashed pour la même raison que l'inscription : l'index
+                // UNIQUE(user_id, role_id, roleable_type, roleable_id) retient
+                // aussi les lignes supprimées.
+                $existingClassroomRole = UserRole::withTrashed()
+                    ->where('user_id', $student->id)
                     ->where('role_id', $studentRole->id)
                     ->where('roleable_type', 'classroom')
                     ->where('roleable_id', $classroom->id)
@@ -114,6 +135,8 @@ class StudentClassroomController extends Controller
                         'roleable_type' => 'classroom',
                         'roleable_id' => $classroom->id
                     ]);
+                } elseif ($existingClassroomRole->trashed()) {
+                    $existingClassroomRole->restore();
                 }
             }
 
@@ -127,6 +150,13 @@ class StudentClassroomController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('StudentClassroom.enroll failed', [
+                'student_id' => $request->student_id,
+                'classroom_id' => $request->classroom_id,
+                'family_id' => $request->family_id,
+                'exception' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de l\'inscription',
@@ -172,6 +202,13 @@ class StudentClassroomController extends Controller
                 ->where('roleable_type', 'classroom')
                 ->where('roleable_id', $request->classroom_id)
                 ->delete();
+
+            // La décision de fin d'année suit l'inscription : sans ça elle
+            // resurgirait à la réinscription dans la même classe.
+            StudentYearOutcome::forgetForEnrollments(
+                [(int) $request->student_id],
+                [(int) $request->classroom_id]
+            );
 
             DB::commit();
 

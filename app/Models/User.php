@@ -51,22 +51,27 @@ class User extends Authenticatable
         return $this->hasMany(UserRole::class);
     }
 
+    // visibleRolesFilter : ces relations lisent user_roles en SQL brut, le global
+    // scope du modèle UserRole ne s'y applique pas — on y rejoue la même règle.
     public function schools()
     {
         return $this->belongsToMany(School::class, 'user_roles')
-            ->withPivot('role_id');
+            ->withPivot('role_id')
+            ->where(visibleRolesFilter('user_roles'));
     }
 
     public function families()
     {
         return $this->belongsToMany(Family::class, 'user_roles')
-            ->withPivot('role_id');
+            ->withPivot('role_id')
+            ->where(visibleRolesFilter('user_roles'));
     }
 
     public function classrooms()
     {
         return $this->belongsToMany(Classroom::class, 'user_roles')
-            ->withPivot('role_id');
+            ->withPivot('role_id')
+            ->where(visibleRolesFilter('user_roles'));
     }
 
     public function studentClassrooms()

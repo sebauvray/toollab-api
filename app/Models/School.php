@@ -33,7 +33,9 @@ class School extends Model
     public function users()
     {
         return $this->belongsToMany(User::class, 'user_roles')
-            ->withPivot('role_id');
+            ->withPivot('role_id')
+            // Le global scope de UserRole ne s'applique pas sur un pivot.
+            ->where(visibleRolesFilter('user_roles'));
     }
 
     public function classrooms(): HasMany
