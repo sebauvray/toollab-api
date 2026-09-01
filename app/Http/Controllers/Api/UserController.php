@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Classroom;
+use App\Models\Scopes\BelongsToSchoolYearScope;
 use App\Models\StudentClassroom;
 use App\Models\User;
 use App\Models\UserRole;
@@ -556,9 +557,11 @@ class UserController extends Controller
             $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
                 ->where('school_id', $schoolId)->pluck('id');
 
-            // Restreint aux élèves ayant une inscription active dans l'année courante.
-            // Le global scope BelongsToSchoolYear sur StudentClassroom filtre par année.
-            $activeStudentIds = StudentClassroom::where('status', 'active')
+            $enrolledInYearIds = StudentClassroom::where('status', 'active')
+                ->distinct()
+                ->pluck('student_id');
+
+            $everEnrolledIds = StudentClassroom::withoutGlobalScope(BelongsToSchoolYearScope::class)
                 ->distinct()
                 ->pluck('student_id');
 
@@ -578,7 +581,11 @@ class UserController extends Controller
                 ->where('roles.slug', 'student')
                 ->where('user_roles.roleable_type', 'family')
                 ->whereIn('user_roles.roleable_id', $familyIds)
-                ->whereIn('users.id', $activeStudentIds)
+                // Inscrits dans l'année sélectionnée + élèves jamais affectés à une classe.
+                ->where(function($q) use ($enrolledInYearIds, $everEnrolledIds) {
+                    $q->whereIn('users.id', $enrolledInYearIds)
+                        ->orWhereNotIn('users.id', $everEnrolledIds);
+                })
                 ->where(function($q) use ($query) {
                     $q->where('users.first_name', 'LIKE', "%{$query}%")
                         ->orWhere('users.last_name', 'LIKE', "%{$query}%")
@@ -616,6 +623,7 @@ class UserController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('User.searchStudents failed', ['exception' => $e, 'user_id' => auth()->id()]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue',

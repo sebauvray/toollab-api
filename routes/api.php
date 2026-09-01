@@ -71,8 +71,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         // Lecture/gestion utilisateurs et staff — toujours autorisé même en consultation
         // d'une année archivée (gestion de la plateforme, pas des données pédagogiques)
         Route::prefix('users')->group(function () {
-            // search est year-scopé : on ne propose que les élèves inscrits dans l'année courante.
-            // Le middleware schoolyear ne bloque pas les GET, il ne fait que résoudre l'année.
+            // search est year-scopé : élèves inscrits dans l'année sélectionnée, plus les
+            // élèves jamais affectés à une classe (une famille existe avant toute affectation).
             Route::middleware('schoolyear')->get('/search', [UserController::class, 'searchStudents']);
             Route::get('/', [UserController::class, 'getAllUsersWithRoles']);
             Route::get('/by-context', [UserController::class, 'getUsersByContextAndRole']);

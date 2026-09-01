@@ -134,7 +134,7 @@ Rendu par `components/Tag.vue`. Tri métier : `no_enrollment < exempted < incomp
 
 ### `/` — recherche d'élève (page d'accueil)
 `SearchInput` interroge `GET /api/users/search?query=` (min. 2 caractères, debounce 300 ms) et navigue vers `/family/{family_id}`.
-⚠ Cet endpoint est **year-scopé** : `UserController::searchStudents` restreint aux élèves ayant une **inscription active dans l'année courante** (`StudentClassroom::where('status','active')`, filtré par le global scope). Un élève créé mais **non inscrit est introuvable** par la recherche — c'est volontaire, mais c'est la première source d'incompréhension utilisateur (« mon élève a disparu »).
+Cet endpoint est **year-scopé à deux branches** (décision utilisateur 2026-09-01) : il renvoie les élèves ayant une inscription **active dans l'année sélectionnée** OU n'ayant **jamais été affectés à aucune classe, toutes années confondues** (`StudentClassroom::withoutGlobalScope(BelongsToSchoolYearScope::class)`). Raison : pendant la période d'inscription, une famille existe avant toute affectation en classe et doit rester trouvable ; mais un élève inscrit uniquement dans une autre année ne doit pas polluer l'année sélectionnée. Ne restreindre ni aux seuls inscrits (recherche vide en septembre), ni élargir à tous les élèves (fuite entre années). La recherche ne matche **que les élèves** (slug `student`), jamais les responsables.
 La recherche accepte nom, prénom, « nom prénom », « prénom nom », et la date de naissance en `Y-m-d`, `d/m` ou `d/m/Y`.
 La page ne montre la barre de recherche qu'après avoir confirmé que l'utilisateur **n'est pas** professeur.
 
