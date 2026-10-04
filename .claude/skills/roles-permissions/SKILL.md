@@ -131,6 +131,19 @@ Ne le vérifient **pas** : `TeacherController::ensureTeacher`, `UserController::
 Toutes ces routes vérifient `currentSchoolId() === $validated['school_id']`.
 Chaque changement notifie l'utilisateur (`StaffRoleChangedNotification` : `added` | `removed` | `removed_from_school`).
 
+⚠ **Les rôles école se suppriment en `forceDelete()`**, jamais `delete()` : `UserRole` porte `SoftDeletes` (prévu pour les liens famille/classe de la corbeille) mais `unique_user_role_context` n'inclut pas `deleted_at` → un reliquat soft-deleted fait échouer toute ré-attribution en 500. `StaffController::purgeTrashedSchoolRole()` absorbe les reliquats hérités avant chaque `firstOrCreate`.
+
+## 8 bis. Passation de direction (`DirectorHandoverController` + `DirectorHandoverService`)
+
+| Endpoint | Accès | Effet |
+|---|---|---|
+| `GET/POST /api/director-handover`, `POST …/{id}/resend`, `POST …/{id}/cancel` | `school` + `checkrole:director` **+ `isDirectorOf()` sans bypass super-admin** | consulter / lancer (email + `outgoing_role` ∈ admin\|registar\|none) / renvoyer (nouveau jeton, +7 j) / annuler |
+| `POST /api/director-handover/{check,accept,decline}` | public, `throttle:token-check`, **seul le jeton compte** (jamais l'utilisateur connecté) | décrire / accepter / refuser |
+
+Création et renvoi limités à 10/min **par directeur** ; seul l'initiateur peut renvoyer (403 sinon), tout directeur de l'école peut annuler. La notification d'invitation implémente `ShouldBeEncrypted` : le jeton brut ne doit jamais apparaître en clair dans `jobs`/`failed_jobs`. Règles : une seule passation `pending` par école (409 sinon ; une expirée est basculée `expired` à la création suivante) ; pas de passation vers soi-même ni vers un directeur existant (422) ; jeton stocké hashé (sha256), usage unique, 7 jours.
+À l'acceptation (transaction + `lockForUpdate`) : l'émetteur doit encore être directeur (409 sinon) ; le destinataire reçoit `director` accepté, ses autres rôles école en attente sont acceptés, ses `admin`/`registar` sont retirés (redondants), `teacher` conservé ; l'émetteur perd `director` (et `admin`/`registar` hors rôle choisi) et reçoit le rôle choisi (`none` = aucun rôle d'administration). **Son rôle `teacher` est conservé par défaut**, y compris avec `none` ; il n'est retiré que si `remove_teacher_role` = true (choix proposé dans la modale uniquement quand il est professeur). Rôles famille et autres écoles intacts. L'e-mail de résultat liste les rôles restants.
+Compte : si l'email n'a pas de compte, ou a un `InvitationToken` **et aucune adhésion acceptée nulle part** (compte invité jamais activé — un compte actif avec un vieux jeton n'est jamais touché), la page `/passation-direction` exige mot de passe (+ nom si vide) et révoque les tokens Sanctum ; sinon aucune donnée de compte n'est modifiée.
+
 ## 9. Côté front : le rôle ACTIF unique
 
 Le point le plus important et le plus récent (`utils/schoolRoles.js`) :

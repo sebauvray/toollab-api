@@ -39,6 +39,18 @@ class StaffController extends Controller
         return StaffRolePermissions::canManage($callerRoles->all(), $roleSlug);
     }
 
+    // Le soft delete de user_roles ne concerne que les liens famille/classe ; un reliquat
+    // supprimé ferait échouer la contrainte unique_user_role_context à la ré-attribution.
+    private function purgeTrashedSchoolRole(int $userId, int $roleId, int $schoolId): void
+    {
+        UserRole::onlyTrashed()
+            ->where('user_id', $userId)
+            ->where('role_id', $roleId)
+            ->whereIn('roleable_type', ['school', School::class])
+            ->where('roleable_id', $schoolId)
+            ->forceDelete();
+    }
+
     private function requestedRoleSlugs(Request $request): array
     {
         $roles = $request->input('roles');
@@ -138,6 +150,7 @@ class StaffController extends Controller
             // l'utilisateur n'a pas accepté, l'école ne voit pas son identité.
             $createdRoleSlugs = [];
             foreach ($roleSlugs as $roleSlug) {
+                $this->purgeTrashedSchoolRole($user->id, $roles[$roleSlug]->id, $school->id);
                 $userRole = $school->userRoles()->firstOrCreate(
                     [
                         'user_id' => $user->id,
@@ -252,6 +265,7 @@ class StaffController extends Controller
 
         $role = Role::where('slug', $roleSlug)->firstOrFail();
         $school = School::findOrFail($schoolId);
+        $this->purgeTrashedSchoolRole((int) $validated['user_id'], $role->id, $school->id);
         $userRole = $school->userRoles()->firstOrCreate([
             'user_id' => $validated['user_id'],
             'role_id' => $role->id,
@@ -317,7 +331,7 @@ class StaffController extends Controller
                 ->where('role_id', $role->id)
                 ->where('roleable_id', $school->id)
                 ->where('roleable_type', 'school')
-                ->delete();
+                ->forceDelete();
 
             if (!$deleted) {
                 DB::rollBack();
@@ -414,7 +428,7 @@ class StaffController extends Controller
             ->where('user_id', $targetUserId)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
-            ->delete();
+            ->forceDelete();
 
         $school = School::findOrFail($schoolId);
         $user->notify(new StaffRoleChangedNotification(

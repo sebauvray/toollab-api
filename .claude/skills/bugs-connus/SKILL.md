@@ -345,7 +345,21 @@ Les montants 270/240/210 (Arabe), 150 (Coran), 75 (multi-cursus) sont **codés e
 - **`FlashMessage` : le timer de fermeture n'est jamais annulé.** Le `watch` arme un `setTimeout(3000)` par message sans `clearTimeout` du précédent : deux messages rapprochés partagent la première échéance, donc le second peut disparaître au bout de quelques dizaines de ms. Visible sur les enchaînements (`pages/tarification/index.vue`, qui émet 14 flashs différents).
 - **`components/settings/StudentImport.vue`, `UserList.vue`, `RoleCard.vue` ne servent qu'à `pages/settings/index.vue`** (660 lignes, 5 onglets). Cette page n'a **aucun middleware de route** : tout son gating est interne (`isDirector` / `canManageUsers`), ce qui est volontaire — les profs y ont accès pour l'onglet Profil/Mot de passe (`teacherAllowed`).
 
+### A-entrypoint-dev. Expéditeur « `${APP_NAME}` » après redémarrage du conteneur API (dev)
+`docker/php/entrypoint.sh` exporte le `.env` via `export $(grep -v '^#' .env | xargs)` : la valeur littérale `"${APP_NAME}"` de `MAIL_FROM_NAME` écrase celle déjà interpolée par Compose, puis `config:cache` la fige. Contournement : `php artisan config:clear`. Prod non concernée (`production-entrypoint.sh`). Non corrigé volontairement (fichier d'infra partagé).
+
+### A-add-role. `POST /api/users/add-role` crée un rôle **non accepté** pour un membre déjà actif
+`StaffController::addUserRole` fait `firstOrCreate` sans `accepted_at` : le rôle reste invisible et sans effet (`CheckRole`, `formatRoles`), contrairement à `createStaffUser` qui gère `alreadyAccepted`. **Dormant** : aucun écran n'appelle cet endpoint (constaté le 2026-10-04).
+
 ## D. Corrigé — ne pas « re-corriger »
+
+- `POST /api/logout` ne révoque plus que le token courant (`currentAccessToken()`), plus tous les appareils (2026-10-04).
+- Redirections de middleware au premier chargement (F5) : `utils/navigation.js::redirectTo()` recharge la page pendant l'hydratation au lieu d'un `navigateTo` routeur → plus de « Hydration mismatch » (registar sur `/statistiques`, prof sur `/family`, déconnecté sur `/settings`). **Tout nouveau middleware de route doit utiliser `redirectTo`, pas `navigateTo`.**
+- Limite `throttle:` sur une route authentifiée : `ThrottleRequests` est désormais **après** `Authenticate` dans la priorité de `bootstrap/app.php` → limite par utilisateur, plus par IP.
+- Rôles école soft-deleted hérités : purgés par `2026_10_04_100000_purge_soft_deleted_school_roles` (ils rendaient un rôle retiré visible sur une année archivée via `VisibleUntilYearClosedScope`).
+
+- Retirer puis ré-attribuer un rôle staff ne fait plus de 500 (`unique_user_role_context` vs soft delete) : `StaffController` supprime les rôles école en `forceDelete()` et purge les reliquats (2026-10-02).
+- `ToollabSeeder` crée le directeur et les professeurs **avec `accepted_at`** (avant : profs sans accès à l'école, directeur passant uniquement grâce au bypass super-admin).
 
 - `POST /api/tarification/calculer` fonctionne (`calculerTotalFamille`, pas `calculerTarifsFamille`).
 - Les stats n'ont plus de montants hardcodés ; elles délèguent à `TarifCalculatorService`.

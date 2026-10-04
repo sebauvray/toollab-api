@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
+use App\Http\Controllers\Api\DirectorHandoverController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\FamilyDeletionController;
 use App\Http\Controllers\Api\FamilyImportController;
@@ -30,6 +31,9 @@ Route::middleware('throttle:token-check')->group(function () {
     Route::post('check-reset-token', [PasswordResetController::class, 'checkResetToken']);
     Route::post('/check-invitation-token', [InvitationController::class, 'checkInvitationToken']);
     Route::post('/set-password', [InvitationController::class, 'setPassword']);
+    Route::post('/director-handover/check', [DirectorHandoverController::class, 'check']);
+    Route::post('/director-handover/accept', [DirectorHandoverController::class, 'accept']);
+    Route::post('/director-handover/decline', [DirectorHandoverController::class, 'decline']);
 });
 
 Route::group(['middleware' => ['auth:sanctum']], function () {
@@ -85,6 +89,17 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/users/add-role', [StaffController::class, 'addUserRole']);
         Route::post('/users/remove-role', [StaffController::class, 'removeUserRole']);
         Route::post('/users/remove-from-school', [StaffController::class, 'removeUserFromSchool']);
+
+        // Passation de direction : gestion de compte, hors année scolaire. Le contrôleur
+        // revérifie le rôle director sans le bypass super-admin de checkrole.
+        Route::prefix('director-handover')->middleware('checkrole:director')->group(function () {
+            Route::get('/', [DirectorHandoverController::class, 'current']);
+            Route::middleware('throttle:10,1')->group(function () {
+                Route::post('/', [DirectorHandoverController::class, 'store']);
+                Route::post('/{id}/resend', [DirectorHandoverController::class, 'resend'])->whereNumber('id');
+            });
+            Route::post('/{id}/cancel', [DirectorHandoverController::class, 'cancel'])->whereNumber('id');
+        });
 
         Route::prefix('schools')->group(function () {
             Route::get('/{school}/families', [SchoolController::class, 'getAllFamiliesInSchool']);

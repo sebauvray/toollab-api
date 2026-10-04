@@ -53,6 +53,7 @@ description: Gabarit universel des modales Toollab (overlay, panneau, en-tête, 
 ```
 
 ### Variante « contenu long »
+⚠ À utiliser dès que le contenu dépasse ~350 px de haut (formulaire + liste de choix + bandeau) : sans `max-h` ni corps défilant, sur une fenêtre basse la modale déborde de l'écran **sans pouvoir défiler** et les boutons du pied deviennent inatteignables (vécu sur `DirectorHandoverModal`). Si le bandeau d'erreur est en haut d'un corps défilant, remonter le corps (`scrollTo({top:0})`) quand une erreur apparaît.
 ```html
 <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] flex flex-col">
   <div class="… shrink-0">en-tête</div>

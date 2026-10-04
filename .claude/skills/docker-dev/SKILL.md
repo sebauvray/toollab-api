@@ -108,7 +108,13 @@ Après un reset, **vider le localStorage du navigateur** (`current_school_id` po
 |---|---|
 | `network dev_toollab not found` | `docker network create dev_toollab` |
 | Permission denied sur `storage/` ou `vendor/` | `CURRENT_UID`/`CURRENT_GID` du `.env` ≠ hôte → corriger puis `docker compose up -d --build` |
-| Port 8000/3000/3306 déjà utilisé | changer `CONTAINER_PORT_WEB`/`CONTAINER_PORT_DB`, ou arrêter le service concurrent |
+| Port 8000/3000/3306 déjà utilisé | changer `CONTAINER_PORT_WEB`/`CONTAINER_PORT_DB` (+ `NUXT_PUBLIC_API_URL` du front), ou arrêter le service concurrent. Maildev a ses ports **en dur** (1080/1025) dans `docker-compose.yml` : sur une machine où ils sont pris, créer un `docker-compose.override.yml` local (`ports: !override [...]`) exclu via `.git/info/exclude` — ne jamais modifier le compose versionné pour une contrainte locale. Vérifier d'abord `docker ps` et `lsof -iTCP -sTCP:LISTEN` : d'autres projets Docker tournent sur cette machine |
+| Modification de `.env` toujours sans effet après `config:clear` | le `.env` est injecté en **variables d'environnement du conteneur** (`env_file`) à sa création : `docker compose up -d api` pour le recréer (puis relancer le worker de queue, qui meurt avec le conteneur) |
+| E-mails envoyés avec l'expéditeur « `${APP_NAME}` » après un redémarrage de l'API | bug de l'entrypoint de dev (voir `bugs-connus` A-entrypoint-dev) → `docker exec api_dev_toollab php artisan config:clear` |
+| Modification de `docker/php/entrypoint.sh` sans effet | il est **copié dans l'image** au build (`COPY … /usr/local/bin/`) → `docker compose up -d --build api` |
+| Logo cassé dans les e-mails en dev | `APP_URL` doit inclure le port de l'API (`http://localhost:8010` ici) : le logo est servi par l'API, pas par le front |
+| Le worker `queue:listen` s'arrête tout seul (`exceeded the timeout of 60 sec` dans les logs) | un envoi SMTP vers Maildev a bloqué plus de 60 s et `queue:listen` meurt avec son enfant → relancer ; préférer `queue:work --tries=3 --timeout=90`, qui tue le job sans s'arrêter |
+| Job mail relâché avec `421 Timeout - closing connection` | `queue:work` longue durée garde la connexion SMTP ouverte et Maildev la coupe ; le job repart après le backoff (60 s). En dev, préférer `queue:listen` |
 | L'API répond 500 au premier démarrage | migrations pas encore passées → `migrate --force` |
 | Modification de `.env` sans effet | `config:clear` (l'entrypoint met la config en cache) |
 | `vendor` vide / classe introuvable | `docker exec api_dev_toollab composer install` |

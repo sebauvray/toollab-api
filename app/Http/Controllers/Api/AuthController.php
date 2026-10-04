@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -34,7 +35,10 @@ class AuthController extends Controller
     }
 
     public function logout(Request $request){
-        auth()->user()->tokens()->delete();
+        $token = $request->user()->currentAccessToken();
+        if ($token instanceof PersonalAccessToken) {
+            $token->delete();
+        }
         $response = [
             'message'=>"Vous êtes désormais déconnecté !",
         ];

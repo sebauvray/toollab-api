@@ -92,7 +92,7 @@ class ToollabSeeder extends Seeder
             'role_id' => $directorRole->id,
             'roleable_type' => 'school',
             'roleable_id' => $this->school->id,
-        ]);
+        ], ['accepted_at' => now()]);
 
         $now = Carbon::now();
         $startYear = $now->month >= 9 ? $now->year : $now->year - 1;
@@ -253,7 +253,7 @@ class ToollabSeeder extends Seeder
                 'role_id' => $teacherRole->id,
                 'roleable_type' => 'school',
                 'roleable_id' => $this->school->id,
-            ]);
+            ], ['accepted_at' => now()]);
 
             $this->teachers[] = $user;
         }

@@ -5,4 +5,6 @@ return [
         'trim',
         explode(',', (string) env('SUPER_ADMIN_EMAILS', ''))
     ))),
+
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'Europe/Paris'),
 ];

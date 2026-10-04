@@ -5,7 +5,7 @@ description: Tests automatisés de Toollab — Pest 3 côté API (2 suites exist
 
 # Tests
 
-## 1. État réel de la couverture — 24 tests
+## 1. État réel de la couverture
 
 **Ce qui est solidement testé** (à connaître : ce sont les seules régressions que la suite attrapera).
 
@@ -48,7 +48,17 @@ Aucun test d'**endpoint HTTP**, de **tarification** (`TarifCalculatorService`), 
 
 ⚠ **Aucun test n'est exécuté par la CI** : les workflows GitHub ne font que construire et pousser les images. **Lancer les suites manuellement avant de tagger.**
 
+⚠ **`actingAs()` masque les bugs d'ordre de middlewares** : l'utilisateur est posé avant toute la pile. Pour tester un `throttle:` par utilisateur, une révocation de token ou un logout, utiliser de vrais tokens (`createToken()->plainTextToken` en `Authorization: Bearer`) et `app('auth')->forgetGuards()` entre deux requêtes.
+
+### Passation de direction & staff (HTTP)
+`tests/Feature/DirectorHandoverTest.php` (38 tests : gates, validation, unicité, renvoi/annulation, acceptation nouveau/existant/invité, rétrogradations, refus, jetons) et `tests/Feature/StaffRoleReassignTest.php` (3 tests : ré-attribution après retrait). Jeton récupéré via `Notification::assertSentOnDemand(...)` (`$notification->token` est public).
+
 ## 2. Lancer
+
+⚠ `DB_DATABASE=toollab_api` est une **vraie variable d'environnement du conteneur** (`env_file: .env`) : les `<env>` de `phpunit.xml` ne l'écrasent pas et le garde-fou de `TestCase` refuse de tourner. Toujours lancer avec :
+```bash
+docker exec -e DB_DATABASE=testing api_dev_toollab ./vendor/bin/pest
+```
 
 ```bash
 # prérequis UNE FOIS : la base `testing` doit exister sur MariaDB (cf. §3)

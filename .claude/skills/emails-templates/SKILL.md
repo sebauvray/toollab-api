@@ -15,6 +15,8 @@ description: Templates d'e-mails Blade de Toollab — structure HTML compatible 
 | `emails/staff-role-changed` | `StaffRoleChangedNotification` | `$schoolName`, `$action` (`added`\|`removed`\|`removed_from_school`), `$roleNames[]`, `$remainingRoleNames[]` |
 | `emails/payment-completed` | `PaymentCompletedNotification` | famille, détails du paiement, année |
 | `emails/reset-password` | `CustomResetPasswordNotification` | `$actionUrl`, `$count` (durée de validité) |
+| `emails/director-handover-invitation` | `DirectorHandoverInvitation` (**on-demand** : `Notification::route('mail', $email)`, pas de `$notifiable` nommé) | `$actionUrl` (→ `/passation-direction?token=`), `$schoolName`, `$fromName`, `$expiresAt` (d/m/Y, Europe/Paris) |
+| `emails/director-handover-status` | `DirectorHandoverStatusNotification` | `$action` (`accepted`\|`declined`), `$counterpartName`, `$newRoleName` (null = a quitté l'école), `$notifiable` |
 
 Tous sont rendus via `->view('emails.xxx', [...])` depuis `toMail()`, **jamais** via le markdown Laravel par défaut.
 

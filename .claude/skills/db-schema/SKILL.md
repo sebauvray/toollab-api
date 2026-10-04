@@ -134,6 +134,16 @@ invitation_tokens (id, email INDEX, token UNIQUE, school_id FK NULL ON DELETE?,
                    expires_at, timestamps)
 -- school_id null = activation de compte ; renseigné = acceptation d'une école précise
 
+director_handovers (
+  id, school_id FK CASCADE, from_user_id FK users CASCADE, to_user_id FK users NULL ON DELETE?,
+  email, outgoing_role VARCHAR(20) ∈ admin|registar|none, remove_teacher_role BOOL default 0, token_hash CHAR(64) UNIQUE (sha256, jamais le jeton brut),
+  status VARCHAR(20) default 'pending' ∈ pending|accepted|declined|cancelled|expired,
+  expires_at, responded_at?, created_by?, updated_by?, timestamps
+)
+INDEX dh_school_status_index(school_id, status)
+-- Passation de direction (BelongsToSchool + TrackChangesTrait). Une seule « pending » par école,
+-- garantie par lockForUpdate sur schools dans DirectorHandoverService::initiate (pas de contrainte SQL).
+
 family_imports (
   id, school_id FK CASCADE, school_year_id FK NULL?, user_id FK NULL?,
   original_filename, stored_path, status VARCHAR(30) INDEX default 'pending',
