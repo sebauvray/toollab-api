@@ -10,6 +10,7 @@ use App\Models\Classroom;
 use App\Models\ClassSchedule;
 use App\Models\StudentClassroom;
 use App\Models\StudentYearOutcome;
+use App\Models\UserRole;
 use App\Services\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -519,23 +520,45 @@ class ClassroomController extends Controller
 
         $attByStudent = $attendances->groupBy('student_id');
 
-        $students = StudentClassroom::query()
+        $enrollments = StudentClassroom::query()
             ->where('classroom_id', $classroom->id)
             ->where('status', 'active')
-            ->with('student:id,first_name,last_name')
+            ->with('student:id,first_name,last_name', 'student.infos')
+            ->get();
+
+        $responsiblesByFamily = UserRole::query()
+            ->where('roleable_type', 'family')
+            ->whereIn('roleable_id', $enrollments->pluck('family_id')->filter()->unique())
+            ->whereHas('role', fn ($q) => $q->where('slug', 'responsible'))
+            ->with('user:id,first_name,last_name,email', 'user.infos')
             ->get()
+            ->filter(fn ($ur) => $ur->user)
+            ->groupBy('roleable_id')
+            ->map(fn ($roles) => $roles->unique('user_id')->map(fn ($ur) => [
+                'name' => trim($ur->user->first_name . ' ' . $ur->user->last_name),
+                'email' => $ur->user->email,
+                'phone' => $ur->user->infos->firstWhere('key', 'phone')?->value,
+            ])->values());
+
+        $students = $enrollments
             ->sortBy(fn ($sc) => mb_strtolower(trim(($sc->student?->last_name ?? '') . ' ' . ($sc->student?->first_name ?? ''))))
             ->values()
-            ->map(function (StudentClassroom $sc) use ($outcomes, $attByStudent) {
+            ->map(function (StudentClassroom $sc) use ($outcomes, $attByStudent, $responsiblesByFamily) {
                 $o = $outcomes->get($sc->student_id);
                 $att = [];
                 foreach (($attByStudent->get($sc->student_id) ?? collect()) as $a) {
                     $att[$a->date->toDateString()] = ['status' => $a->status, 'justification' => $a->justification];
                 }
+                $infos = $sc->student?->infos ?? collect();
                 return [
                     'student_id' => $sc->student_id,
                     'first_name' => $sc->student?->first_name,
                     'last_name' => $sc->student?->last_name,
+                    'birthdate' => $infos->firstWhere('key', 'birthdate')?->value,
+                    'gender' => $infos->firstWhere('key', 'gender')?->value,
+                    'family_id' => $sc->family_id,
+                    'enrollment_date' => $sc->enrollment_date?->toDateString(),
+                    'responsibles' => $responsiblesByFamily->get($sc->family_id, collect())->values(),
                     'outcome' => $o?->outcome,
                     'commentaire' => $o?->commentaire,
                     'attendance' => $att,

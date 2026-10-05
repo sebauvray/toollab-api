@@ -57,6 +57,12 @@ await browser.close()
 
 Puis **relire la capture** avec l'outil Read (l'image est affichée) — ne pas se contenter de « le script a tourné ».
 
+## 3 bis. Pièges vécus (2026-10)
+
+- **Chromium absent** (« Executable doesn't exist … headless_shell-12xx ») : le cache n'a qu'une autre révision → `chromium.launch({ executablePath: <ls -d ~/Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell> })`.
+- `relhanti@gmail.com` est **super-admin** → le login redirige vers `/admin`, pas `/` : le `waitForURL` du script type expire.
+- Le limiter `login` (5/min) se déclenche vite en itérant. Se connecter **une fois** par curl (`> scratchpad/login.json`), puis `context.addInitScript` qui pose `auth.token`, `auth.user`, `current_school_id`, `current_school_roles`, `current_school_active_role` avant le `goto`.
+
 ## 4. Ce qu'il faut regarder
 
 - [ ] Aucun `Failed to resolve component` dans la console (import de sous-dossier oublié).

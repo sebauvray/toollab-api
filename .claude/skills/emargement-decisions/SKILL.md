@@ -113,13 +113,16 @@ UI : select « Professeur principal » dans Add/UpdateClassModal, visible seulem
 ```
 GET /api/admin/classrooms/{c}/suivi   ClassroomController::adminSuivi
   → {classroom:{…, schedules:[{day,start_time,end_time,teacher}]},
-     dates:[], students:[{last_name, first_name, outcome, commentaire,
+     dates:[], students:[{last_name, first_name, birthdate, gender, family_id, enrollment_date,
+                          responsibles:[{name,email,phone}], outcome, commentaire,
                           attendance:{date:{status, justification}}}]}
 
 GET /api/admin/outcomes               ClassroomController::adminOutcomesOverview
   → {items:[{student_id, first_name, last_name, classroom_id, classroom_name,
              teacher, cursus, cursus_id, level, outcome, commentaire}]}
 ```
+`responsibles` est chargé en **batch `UserRole`** (`whereIn('roleable_id', family_ids)` + `user.infos`) et `student.infos` en eager : 0 requête par élève.
+
 `teacher` = noms distincts des profs des créneaux de la classe (fallback `teacher_name`), précalculé via `$teacherByClassroom` (eager `schedules.teacher`, **pas de N+1**).
 
 ⚠ Un élève sans aucun émargement renvoie `attendance: []` (array PHP vide, pas `{}`). En JS `att[date]` → `undefined` → cellule « – ». Pas de bug, mais ne pas supposer un objet.
@@ -145,8 +148,12 @@ Grille de cartes `md:2 / lg:3 / xl:grid-cols-4`. Bandeau coloré par genre (`gen
 
 ### Côté admin (`pages/classes/[id].vue`) — lecture seule
 
+**Accès** : depuis `/classes`, on clique sur la classe elle-même (ligne entière `NuxtLink` + chevron en vue liste, nom de la classe en vue cartes). **Pas de boutons « Émargement » / « Décisions »** par ligne (retirés à la demande de l'utilisateur) : les deux onglets de la page suffisent. Plus aucun `?tab=` n'est géré.
+
 **Ne PAS réutiliser la matrice 4 colonnes du prof** (jugée illogique en lecture seule, la note y est invisible). À la place :
-- onglet **Émargement** : même matrice enrichie que le prof (mois, colonne figée, taux), **motif au survol via un `hoverTip` maison** (popover blanc bordure ambre, `fixed z-40 pointer-events-none`, clampé `window.innerWidth - 220`). **Jamais le `title` natif.**
+- onglet **Émargement** (enrichi 2026-10) : bandeau de synthèse 4 cases dans **un seul** conteneur (assiduité classe, séances, absences J/NJ, « À surveiller » cliquable = filtre), barre d'outils (recherche NFD, segmented Tous/À surveiller, tri nom/absences/assiduité), matrice avec 3 colonnes **Bilan figées à droite** (`sticky right-0 / right-[3.5rem] / right-[6.5rem]` + colonne spacer `w-full`) : Just. · Non j. · Taux. « À surveiller » = taux < 70 % **ou** ≥ 2 absences consécutives (séances non pointées ignorées) ; point rouge après le nom. Tons du taux : rouge < 70, ambre < 90.
+- **Clic sur une ligne → panneau latéral** `components/suivi/StudentAttendancePanel.vue` (fixed droite, `max-w-md`, Échap/overlay ferment) : assiduité + barre segmentée, compteurs, alerte rouge si série d'absences en cours, barres par mois, historique des absences **avec motif en clair**, décision, responsables (`tel:`/`mailto:`), lien fiche famille. Pas d'entrée de menu : l'utilisateur ne veut **pas de nouvel onglet dans la sidebar** pour cette feature.
+- matrice : **motif au survol via un `hoverTip` maison** (popover blanc bordure ambre, `fixed z-40 pointer-events-none`, clampé `window.innerWidth - 220`). **Jamais le `title` natif.**
 - onglet **Décisions** : tableau **Élève · Décision · Note**, décision = **chip teinté unique**, note **en texte clair inline**.
 
 > **Règle générale admin read-only** : afficher l'information (motifs, notes) directement. Le survol/popover est une affordance d'**édition**, réservée au professeur.
