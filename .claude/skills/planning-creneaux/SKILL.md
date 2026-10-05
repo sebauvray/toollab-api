@@ -77,6 +77,9 @@ Si tu modifies le rendu, **ne casse pas ce calcul** — il est purement fonction
 `teacherService.mySchedules()` → `ScheduleGrid`. Clic sur un créneau → `/professeur/classes/{id}`.
 État vide : « Aucun créneau ne vous est attribué pour cette année. »
 
+### `/classes/[id]` — onglet Planning (Émargement · Planning · Décisions)
+Pas d'appel dédié : `gridSchedules` mappe `classroom.schedules` de `adminSuivi` (`teacher` = chaîne → `teacher_name`, `id` = index, `classroom` sans `id` → blocs non cliquables).
+
 ### `/professeurs` (director/admin) — 2 onglets
 
 | Onglet | Contenu |
