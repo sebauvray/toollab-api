@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Classroom;
+use App\Models\Role;
 use App\Models\Scopes\BelongsToSchoolYearScope;
 use App\Models\StudentClassroom;
 use App\Models\User;
@@ -531,10 +532,10 @@ class UserController extends Controller
         $teachers = User::query()
             ->select(['users.id', 'users.first_name', 'users.last_name', 'users.email'])
             ->join('user_roles', 'user_roles.user_id', '=', 'users.id')
-            ->join('roles', 'roles.id', '=', 'user_roles.role_id')
-            ->where('roles.slug', 'teacher')
+            ->whereIn('user_roles.role_id', Role::teachingRoleIds($schoolId))
             ->where('user_roles.roleable_type', 'school')
             ->where('user_roles.roleable_id', $schoolId)
+            ->distinct()
             ->orderBy('users.last_name')
             ->orderBy('users.first_name')
             ->get();

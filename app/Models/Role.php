@@ -47,6 +47,25 @@ class Role extends Model
         return $query->where('school_id', $schoolId);
     }
 
+    /** Ids des rôles de l'école (et modèles globaux) qui donnent l'espace professeur. */
+    public static function teachingRoleIds(int $schoolId): array
+    {
+        return static::query()
+            ->where(fn ($q) => $q->where('school_id', $schoolId)->orWhereNull('school_id'))
+            ->whereHas('permissions', fn ($q) => $q->where('key', 'teaching.access'))
+            ->pluck('id')
+            ->all();
+    }
+
+    /** Slugs des rôles qu'on peut attribuer dans l'école (tout sauf les rôles verrouillés). */
+    public static function assignableSlugsFor(?int $schoolId): array
+    {
+        return $schoolId === null ? [] : static::forSchool($schoolId)
+            ->where('is_locked', false)
+            ->pluck('slug')
+            ->all();
+    }
+
     /**
      * Rôle staff propre à une école. Les rôles staff sont copiés par école :
      * un Role::where('slug', …) seul renverrait le modèle global ou la copie

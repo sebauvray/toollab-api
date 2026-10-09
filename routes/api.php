@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\FamilyDeletionController;
 use App\Http\Controllers\Api\FamilyImportController;
 use App\Http\Controllers\Api\InvitationController;
+use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
@@ -83,6 +84,17 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::get('/teachers', [UserController::class, 'listTeachers']);
             Route::get('/school/{school}', [UserController::class, 'getSchoolUsers']);
             Route::get('/classroom/{classroom}', [UserController::class, 'getClassroomUsers']);
+        });
+
+        // Rôles de l'école : lecture pour qui gère le personnel (choix du rôle à
+        // attribuer), écriture réservée à roles.manage.
+        Route::prefix('roles')->group(function () {
+            Route::middleware('permission:staff.manage,roles.manage')->get('/', [RoleController::class, 'index']);
+            Route::middleware('permission:roles.manage')->group(function () {
+                Route::post('/', [RoleController::class, 'store']);
+                Route::put('/{role}', [RoleController::class, 'update'])->whereNumber('role');
+                Route::delete('/{role}', [RoleController::class, 'destroy'])->whereNumber('role');
+            });
         });
 
         Route::post('/users/create-staff', [StaffController::class, 'createStaffUser']);

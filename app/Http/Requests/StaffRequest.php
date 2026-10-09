@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Role;
 use App\Support\StaffRolePermissions;
+use Illuminate\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -41,9 +43,9 @@ class StaffRequest extends FormRequest
             'first_name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
             'email' => 'required|email',
-            'role' => 'required|in:admin,registar,teacher',
+            'role' => ['required', Rule::in(Role::assignableSlugsFor((int) $this->input('school_id')))],
             'roles' => 'sometimes|array|min:1',
-            'roles.*' => 'required|in:admin,registar,teacher|distinct',
+            'roles.*' => ['required', 'distinct', Rule::in(Role::assignableSlugsFor((int) $this->input('school_id')))],
             'school_id' => 'required|exists:schools,id',
         ];
     }

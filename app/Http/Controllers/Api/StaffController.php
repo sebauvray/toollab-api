@@ -14,6 +14,7 @@ use App\Notifications\StaffInvitation;
 use App\Notifications\StaffRoleChangedNotification;
 use App\Support\StaffRolePermissions;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -65,10 +66,10 @@ class StaffController extends Controller
             return [];
         }
 
-        $roles = Role::query()
-            ->whereIn('slug', $slugs)
-            ->get()
-            ->keyBy('slug');
+        // Noms propres à l'école : un rôle personnalisé peut porter le même slug
+        // ailleurs sous un autre nom.
+        $roles = Role::global()->whereIn('slug', $slugs)->get()->keyBy('slug')
+            ->merge(Role::forSchool((int) currentSchoolId())->whereIn('slug', $slugs)->get()->keyBy('slug'));
 
         return collect($this->sortRoleSlugs($slugs))
             ->map(fn ($slug) => $roles[$slug]->name ?? $slug)
@@ -224,7 +225,7 @@ class StaffController extends Controller
         $validated = $request->validate([
             'user_id' => 'required|integer|exists:users,id',
             'school_id' => 'required|integer|exists:schools,id',
-            'role' => 'required|in:admin,registar,teacher',
+            'role' => ['required', Rule::in(Role::assignableSlugsFor((int) $request->input('school_id')))],
         ]);
 
         $caller = auth()->user();
@@ -253,10 +254,19 @@ class StaffController extends Controller
         $role = Role::staffFor($schoolId, $roleSlug);
         $school = School::findOrFail($schoolId);
         $this->purgeTrashedSchoolRole((int) $validated['user_id'], $roleSlug, $school->id);
-        $userRole = $school->userRoles()->firstOrCreate([
-            'user_id' => $validated['user_id'],
-            'role_id' => $role->id,
-        ]);
+        // Comme create-staff : un membre qui a déjà accepté l'école reçoit le
+        // nouveau rôle accepté, sinon il resterait sans effet.
+        $alreadyAccepted = $school->userRoles()
+            ->where('user_id', $validated['user_id'])
+            ->whereNotNull('accepted_at')
+            ->exists();
+        $userRole = $school->userRoles()->firstOrCreate(
+            [
+                'user_id' => $validated['user_id'],
+                'role_id' => $role->id,
+            ],
+            $alreadyAccepted ? ['accepted_at' => now()] : []
+        );
 
         if ($userRole->wasRecentlyCreated) {
             $user = User::findOrFail($validated['user_id']);
@@ -284,7 +294,7 @@ class StaffController extends Controller
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
             'school_id' => 'required|exists:schools,id',
-            'role_name' => 'required|in:admin,registar,teacher',
+            'role_name' => ['required', Rule::in(Role::assignableSlugsFor((int) $request->input('school_id')))],
         ]);
 
         $caller = auth()->user();

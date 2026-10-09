@@ -30,7 +30,7 @@ class StoreClassroomRequest extends FormRequest
             'main_teacher_id' => ['nullable', 'integer', Rule::exists('user_roles', 'user_id')->where(function ($q) use ($schoolId) {
                 $q->where('roleable_type', 'school')
                     ->where('roleable_id', $schoolId)
-                    ->whereIn('role_id', \App\Models\Role::query()->where('slug', 'teacher')->pluck('id'));
+                    ->whereIn('role_id', \App\Models\Role::teachingRoleIds($schoolId));
             })],
             'schedules' => 'nullable|array',
             'schedules.*.day' => 'required|in:Lundi,Mardi,Mercredi,Jeudi,Vendredi,Samedi,Dimanche',
@@ -40,7 +40,7 @@ class StoreClassroomRequest extends FormRequest
             'schedules.*.teacher_id' => ['nullable', 'integer', Rule::exists('user_roles', 'user_id')->where(function ($q) use ($schoolId) {
                 $q->where('roleable_type', 'school')
                     ->where('roleable_id', $schoolId)
-                    ->whereIn('role_id', \App\Models\Role::query()->where('slug', 'teacher')->pluck('id'));
+                    ->whereIn('role_id', \App\Models\Role::teachingRoleIds($schoolId));
             })],
         ];
     }

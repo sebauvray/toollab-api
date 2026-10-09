@@ -77,3 +77,13 @@ it('retire définitivement les rôles lors d\'un retrait de l\'établissement', 
         'email' => $this->member->email, 'role' => 'teacher', 'roles' => ['teacher'], 'school_id' => $this->school->id,
     ])->assertCreated();
 });
+
+it('donne un rôle ajouté déjà accepté à un membre qui a accepté l\'école', function () {
+    staffCall('/api/users/add-role', [
+        'user_id' => $this->member->id, 'school_id' => $this->school->id, 'role' => 'registar',
+    ])->assertCreated();
+
+    expect(UserRole::where('user_id', $this->member->id)
+        ->whereHas('role', fn ($q) => $q->where('slug', 'registar'))
+        ->value('accepted_at'))->not->toBeNull();
+});
