@@ -99,11 +99,7 @@ class SchoolController extends Controller
                 $isNewDirector = true;
             }
 
-            $directorRole = Role::where('slug', 'director')->first();
-
-            if (!$directorRole) {
-                throw new \Exception('Le rôle de directeur n\'existe pas dans la base de données');
-            }
+            $directorRole = Role::staffFor($school->id, 'director');
 
             $directorRoleEntry = $school->userRoles()->firstOrCreate([
                 'user_id' => $director->id,

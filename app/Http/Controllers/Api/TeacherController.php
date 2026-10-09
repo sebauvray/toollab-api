@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Classroom;
-use App\Models\Role;
 use App\Models\SchoolYear;
 use App\Models\StudentClassroom;
 use App\Models\StudentYearOutcome;
@@ -17,12 +16,9 @@ class TeacherController extends Controller
 {
     private function ensureTeacher(int $schoolId): bool
     {
-        $teacherRoleId = Role::where('slug', 'teacher')->value('id');
-        if (!$teacherRoleId) return false;
-
         return UserRole::query()
             ->where('user_id', auth()->id())
-            ->where('role_id', $teacherRoleId)
+            ->whereHas('role', fn ($q) => $q->where('slug', 'teacher'))
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
             ->whereNotNull('accepted_at')

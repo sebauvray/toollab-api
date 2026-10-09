@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\School;
 use App\Models\Family;
 use App\Models\Classroom;
+use App\Services\SchoolRoleProvisioner;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -20,5 +21,11 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             ToollabSeeder::class,
         ]);
+
+        // Les seeders rattachent le staff aux modèles globaux : on raccroche
+        // chaque école sur ses propres rôles.
+        foreach (School::pluck('id') as $schoolId) {
+            app(SchoolRoleProvisioner::class)->provision($schoolId);
+        }
    }
 }

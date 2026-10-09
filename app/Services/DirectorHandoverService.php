@@ -26,7 +26,7 @@ class DirectorHandoverService
     public function isDirectorOf(int $userId, int $schoolId): bool
     {
         return $this->schoolRolesQuery($userId, $schoolId)
-            ->where('role_id', $this->roleId('director'))
+            ->whereHas('role', fn ($q) => $q->where('slug', 'director'))
             ->whereNotNull('accepted_at')
             ->exists();
     }
@@ -327,13 +327,13 @@ class DirectorHandoverService
     {
         $existing = $this->schoolRolesQuery($userId, $schoolId)
             ->withTrashed()
-            ->where('role_id', $this->roleId($slug))
+            ->whereHas('role', fn ($q) => $q->where('slug', $slug))
             ->first();
 
         if (!$existing) {
             UserRole::create([
                 'user_id' => $userId,
-                'role_id' => $this->roleId($slug),
+                'role_id' => $this->roleId($schoolId, $slug),
                 'roleable_type' => 'school',
                 'roleable_id' => $schoolId,
                 'accepted_at' => now(),
@@ -355,7 +355,7 @@ class DirectorHandoverService
     {
         $this->schoolRolesQuery($userId, $schoolId)
             ->withTrashed()
-            ->whereIn('role_id', array_map(fn ($slug) => $this->roleId($slug), $slugs))
+            ->whereHas('role', fn ($q) => $q->whereIn('slug', $slugs))
             ->forceDelete();
     }
 
@@ -367,10 +367,9 @@ class DirectorHandoverService
             ->where('roleable_id', $schoolId);
     }
 
-    private function roleId(string $slug): int
+    private function roleId(int $schoolId, string $slug): int
     {
-        return $this->roleIds[$slug] ??= (int) Role::where('slug', $slug)->value('id')
-            ?: throw new \RuntimeException("Rôle manquant : {$slug}");
+        return $this->roleIds["{$schoolId}.{$slug}"] ??= Role::staffFor($schoolId, $slug)->id;
     }
 
     private function sendInvitation(DirectorHandover $handover, School $school, User $director, string $token): void
