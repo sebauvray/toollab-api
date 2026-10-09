@@ -139,7 +139,7 @@ class UserController extends Controller
      */
     private function formatRoles(User $user, string $type): array
     {
-        $userRoles = $user->roles->where('roleable_type', $type);
+        $userRoles = $user->roles()->with('role.permissions')->get()->where('roleable_type', $type);
 
         // Pour les écoles, une invitation en attente (accepted_at null) ne confère
         // aucun rôle/accès tant qu'elle n'a pas été acceptée.
@@ -198,11 +198,19 @@ class UserController extends Controller
                     $contextData['logo'] = $context->logo;
                 }
 
-                return [
+                $entry = [
                     'role' => $userRole->role->name,
                     'role_slug' => $userRole->role->slug,
                     'context' => $contextData,
                 ];
+
+                // Le front filtre ses écrans sur les permissions du rôle actif
+                // (bascule vue prof / vue gestion) : il les lui faut par rôle.
+                if ($type === 'school') {
+                    $entry['permissions'] = $userRole->role->permissions->pluck('key')->values()->all();
+                }
+
+                return $entry;
             })
             ->values()
             ->toArray();

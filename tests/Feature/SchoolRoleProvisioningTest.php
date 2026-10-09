@@ -109,3 +109,28 @@ it('attribue le rôle de l\'école lors d\'un ajout de rôle', function () {
         ->toContain(Role::staffFor($school->id, 'registar')->id)
         ->not->toContain(Role::global()->where('slug', 'registar')->value('id'));
 });
+
+it('renvoie les permissions de chaque rôle école au front', function () {
+    $school = School::factory()->create(['access' => true]);
+    $user = User::factory()->create(['access' => true]);
+
+    foreach (['admin', 'teacher'] as $slug) {
+        UserRole::create([
+            'user_id' => $user->id,
+            'role_id' => Role::staffFor($school->id, $slug)->id,
+            'roleable_type' => 'school',
+            'roleable_id' => $school->id,
+            'accepted_at' => now(),
+        ]);
+    }
+
+    $schools = collect($this->actingAs($user, 'sanctum')
+        ->getJson("/api/users/{$user->id}/roles")
+        ->assertOk()
+        ->json('roles.schools'))
+        ->keyBy('role_slug');
+
+    expect($schools['teacher']['permissions'])->toBe(['teaching.access'])
+        ->and($schools['admin']['permissions'])->toContain('statistics.view')
+        ->and($schools['admin']['permissions'])->not->toContain('teaching.access');
+});
