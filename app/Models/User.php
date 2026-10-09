@@ -41,6 +41,41 @@ class User extends Authenticatable
         return in_array($this->email, config('toollab.super_admin_emails', []), true);
     }
 
+    /**
+     * Permissions cumulées de tous les rôles acceptés de l'utilisateur dans
+     * l'école. Une invitation en attente (accepted_at null) ne donne rien.
+     * Mémorisées sur la requête HTTP, pas sur le modèle : une instance de User
+     * peut survivre à un changement de rôles (tests, workers longs).
+     */
+    public function permissionKeysIn(int $schoolId): array
+    {
+        $cacheKey = "permissions.{$this->id}.{$schoolId}";
+        $attributes = request()->attributes;
+
+        if (!$attributes->has($cacheKey)) {
+            $attributes->set($cacheKey, Permission::query()
+                ->whereHas('roles.userRoles', fn ($q) => $q
+                    ->where('user_id', $this->id)
+                    ->whereIn('roleable_type', ['school', School::class])
+                    ->where('roleable_id', $schoolId)
+                    ->whereNotNull('accepted_at'))
+                ->pluck('key')
+                ->all());
+        }
+
+        return $attributes->get($cacheKey);
+    }
+
+    /** Vrai si l'utilisateur a au moins une des permissions dans l'école. */
+    public function hasPermissionIn(int $schoolId, string ...$keys): bool
+    {
+        if ($this->is_super_admin) {
+            return true;
+        }
+
+        return array_intersect($keys, $this->permissionKeysIn($schoolId)) !== [];
+    }
+
     public function infos()
     {
         return $this->hasMany(UserInfo::class);

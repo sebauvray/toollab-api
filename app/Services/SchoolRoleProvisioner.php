@@ -17,10 +17,21 @@ class SchoolRoleProvisioner
 {
     private const SCHOOL_ROLEABLE_TYPES = ['school', 'App\\Models\\School'];
 
+    /**
+     * Aligne le catalogue en base sur le code, ainsi que les droits des modèles
+     * globaux : un rattachement resté sur un modèle garde ses droits par défaut.
+     */
     public function syncPermissions(): void
     {
         foreach (PermissionCatalog::PERMISSIONS as $key => $meta) {
             Permission::updateOrCreate(['key' => $key], $meta);
+        }
+
+        $permissionIds = Permission::pluck('id', 'key');
+        foreach (Role::global()->whereIn('slug', PermissionCatalog::STAFF_SLUGS)->get() as $template) {
+            $template->permissions()->sync(
+                $permissionIds->only(PermissionCatalog::defaultsFor($template->slug))->values()
+            );
         }
     }
 

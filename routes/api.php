@@ -52,7 +52,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::middleware('superadmin')->group(function () {
         Route::post('/schools', [SchoolController::class, 'store']);
     });
-    Route::middleware(['school', 'checkrole:director,admin'])->put('/schools/{school}', [SchoolController::class, 'update']);
+    Route::middleware(['school', 'permission:school.settings.update'])->put('/schools/{school}', [SchoolController::class, 'update']);
 
     // Avec contexte école (header X-School-Id requis)
     Route::middleware('school')->group(function () {
@@ -61,7 +61,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         // (sinon impossible de lister les années archivées)
         Route::prefix('school-years')->group(function () {
             Route::get('/', [SchoolYearController::class, 'index']);
-            Route::middleware('checkrole:director,admin')->group(function () {
+            Route::middleware('permission:school_years.manage')->group(function () {
                 Route::post('/', [SchoolYearController::class, 'store']);
                 Route::post('/{schoolYear}/close', [SchoolYearController::class, 'close']);
                 Route::post('/{schoolYear}/outcomes-toggle', [SchoolYearController::class, 'toggleOutcomes']);
@@ -69,7 +69,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             });
         });
 
-        Route::middleware('checkrole:director,admin')
+        Route::middleware('permission:school_years.manage')
             ->post('/classrooms/{classroom}/reconduct', [SchoolYearController::class, 'reconductClassroom']);
 
         // Lecture/gestion utilisateurs et staff — toujours autorisé même en consultation
@@ -116,12 +116,14 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::put('/users/{user}/info', [UserController::class, 'updateUserInfo'])->whereNumber('user');
 
             Route::prefix('families')->group(function () {
-                Route::middleware('checkrole:director,admin')->group(function () {
+                Route::middleware('permission:families.import_export')->group(function () {
                     Route::get('/export', [FamilyController::class, 'exportStudents']);
                     Route::get('/import-template', [FamilyImportController::class, 'template']);
                     Route::post('/import', [FamilyImportController::class, 'import']);
                     Route::get('/imports/{familyImport}', [FamilyImportController::class, 'show'])->whereNumber('familyImport');
+                });
 
+                Route::middleware('permission:families.delete')->group(function () {
                     // Suppression réversible. /trashed est déclarée avant /{family}
                     // pour que le segment littéral ne soit pas capté par le binding.
                     Route::get('/trashed', [FamilyDeletionController::class, 'trashed']);
@@ -143,7 +145,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                 Route::get('/{family}/enrollments', [StudentClassroomController::class, 'getFamilyEnrollments']);
             });
 
-            Route::prefix('cursus')->middleware('checkrole:director,admin')->group(function () {
+            Route::prefix('cursus')->middleware('permission:cursus.manage')->group(function () {
                 Route::get('/', [CursusController::class, 'index']);
                 Route::post('/', [CursusController::class, 'store']);
                 Route::get('/{cursus}', [CursusController::class, 'show']);
@@ -154,23 +156,23 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::prefix('classrooms')->group(function () {
                 Route::get('/', [ClassroomController::class, 'index']);
                 Route::get('/{classroom}', [ClassroomController::class, 'show']);
-                Route::middleware('checkrole:director,admin')->group(function () {
+                Route::middleware('permission:classrooms.manage')->group(function () {
                     Route::post('/', [ClassroomController::class, 'store']);
                     Route::put('/{classroom}', [ClassroomController::class, 'update']);
                     Route::delete('/{id}', [ClassroomController::class, 'destroy']);
                 });
             });
 
-            Route::prefix('admin/classrooms')->middleware('checkrole:director,admin')->group(function () {
+            Route::prefix('admin/classrooms')->middleware('permission:classrooms.supervise')->group(function () {
                 Route::get('/', [ClassroomController::class, 'getAdminClassrooms']);
                 Route::get('/export', [ClassroomController::class, 'exportClassrooms']);
                 Route::get('/{classroom}/suivi', [ClassroomController::class, 'adminSuivi']);
                 Route::delete('/{classroom}/students/{student}', [ClassroomController::class, 'removeStudentFromClass']);
             });
 
-            Route::middleware('checkrole:director,admin')->get('/admin/outcomes', [ClassroomController::class, 'adminOutcomesOverview']);
+            Route::middleware('permission:classrooms.supervise')->get('/admin/outcomes', [ClassroomController::class, 'adminOutcomesOverview']);
 
-            Route::middleware('checkrole:director,admin')->get('/schedules', [ScheduleController::class, 'index']);
+            Route::middleware('permission:classrooms.supervise')->get('/schedules', [ScheduleController::class, 'index']);
 
             Route::middleware('schoolyear')->prefix('teacher')->group(function () {
                 Route::get('/classrooms', [TeacherController::class, 'myClassrooms']);
@@ -182,12 +184,12 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                 Route::get('/schedules', [ScheduleController::class, 'mySchedules']);
             });
 
-            Route::middleware('checkrole:director,admin,registar')->group(function () {
+            Route::middleware('permission:enrollments.manage')->group(function () {
                 Route::post('/student-classrooms/enroll', [StudentClassroomController::class, 'enroll']);
                 Route::post('/student-classrooms/unenroll', [StudentClassroomController::class, 'unenroll']);
             });
 
-            Route::prefix('tarification')->middleware('checkrole:director,admin')->group(function () {
+            Route::prefix('tarification')->middleware('permission:tarification.manage')->group(function () {
                 Route::get('/cursus', [TarificationController::class, 'index']);
                 Route::post('/cursus/{cursus}/tarif', [TarificationController::class, 'updateTarif']);
                 Route::post('/cursus/{cursus}/reduction-familiale', [TarificationController::class, 'storeReductionFamiliale']);
@@ -202,14 +204,14 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             Route::prefix('families/{family}/paiements')->group(function () {
                 Route::get('/', [App\Http\Controllers\Api\PaiementController::class, 'show']);
                 Route::get('/facture', [App\Http\Controllers\Api\PaiementController::class, 'facture']);
-                Route::middleware('checkrole:director,admin,registar')->group(function () {
+                Route::middleware('permission:payments.edit')->group(function () {
                     Route::post('/lignes', [App\Http\Controllers\Api\PaiementController::class, 'ajouterLigne']);
                     Route::put('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'modifierLigne']);
                     Route::delete('/lignes/{ligne}', [App\Http\Controllers\Api\PaiementController::class, 'supprimerLigne']);
                 });
             });
 
-            Route::prefix('statistics')->middleware('checkrole:admin,director')->group(function () {
+            Route::prefix('statistics')->middleware('permission:statistics.view')->group(function () {
                 Route::get('/overview', [StatisticsController::class, 'overview']);
                 Route::get('/unpaid-families', [StatisticsController::class, 'unpaidFamilies']);
                 Route::post('/search-payments', [StatisticsController::class, 'searchPayments']);

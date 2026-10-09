@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\StaffRolePermissions;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -21,29 +22,12 @@ class StaffRequest extends FormRequest
         }
         $requestedRoles = array_values(array_filter(array_unique($requestedRoles)));
 
-        $userRoles = auth()->user()->roles()
-            ->whereIn('role_id', function ($query) {
-                $query->select('id')
-                    ->from('roles')
-                    ->whereIn('slug', ['director', 'admin']);
-            })
-            ->where('roleable_type', 'school')
-            ->where('roleable_id', $schoolId)
-            ->whereNotNull('accepted_at')
-            ->with('role')
-            ->get()
-            ->pluck('role.slug');
-
-        if ($userRoles->contains('director')) {
-            return true;
-        }
-
-        if (!$userRoles->contains('admin')) {
+        if (!$schoolId || !auth()->user()->hasPermissionIn((int) $schoolId, 'staff.manage')) {
             return false;
         }
 
         foreach ($requestedRoles as $requestedRole) {
-            if (!in_array($requestedRole, ['registar', 'teacher'], true)) {
+            if (!StaffRolePermissions::canManage(auth()->user(), (int) $schoolId, $requestedRole)) {
                 return false;
             }
         }

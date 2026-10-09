@@ -16,13 +16,7 @@ class TeacherController extends Controller
 {
     private function ensureTeacher(int $schoolId): bool
     {
-        return UserRole::query()
-            ->where('user_id', auth()->id())
-            ->whereHas('role', fn ($q) => $q->where('slug', 'teacher'))
-            ->where('roleable_type', 'school')
-            ->where('roleable_id', $schoolId)
-            ->whereNotNull('accepted_at')
-            ->exists();
+        return auth()->user()->hasPermissionIn($schoolId, 'teaching.access');
     }
 
     private function teacherTeachesClassroom(int $classroomId): bool

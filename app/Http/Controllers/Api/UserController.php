@@ -23,7 +23,7 @@ class UserController extends Controller
      * True si le caller peut lire/modifier $target.
      * Règles: super-admin, ou self, ou (caller=director|admin) ET target a un rôle dans la même école.
      */
-    private function canManageUser(User $target): bool
+    private function canManageUser(User $target, string $permission): bool
     {
         $caller = auth()->user();
         if (!$caller) return false;
@@ -34,8 +34,9 @@ class UserController extends Controller
             ->where('user_id', $caller->id)
             ->where('roleable_type', 'school')
             ->whereNotNull('accepted_at')
-            ->whereHas('role', fn($q) => $q->whereIn('slug', ['director', 'admin']))
-            ->pluck('roleable_id');
+            ->pluck('roleable_id')
+            ->unique()
+            ->filter(fn ($schoolId) => $caller->hasPermissionIn((int) $schoolId, $permission));
 
         if ($callerAdminSchoolIds->isEmpty()) return false;
 
@@ -75,15 +76,9 @@ class UserController extends Controller
         return response()->json(['message' => 'Accès refusé'], 403);
     }
 
-    private function callerHasSchoolRole(int $schoolId, array $slugs): bool
+    private function callerCan(int $schoolId, string $permission): bool
     {
-        return UserRole::query()
-            ->where('user_id', auth()->id())
-            ->where('roleable_type', 'school')
-            ->where('roleable_id', $schoolId)
-            ->whereNotNull('accepted_at')
-            ->whereHas('role', fn($q) => $q->whereIn('slug', $slugs))
-            ->exists();
+        return auth()->user()->hasPermissionIn($schoolId, $permission);
     }
 
     /**
@@ -102,7 +97,7 @@ class UserController extends Controller
         if ($schoolId === null) return false;
         if (!$this->userBelongsToSchool($target->id, $schoolId)) return false;
 
-        if ($this->callerHasSchoolRole($schoolId, ['director', 'admin', 'registar'])) {
+        if ($this->callerCan($schoolId, 'families.edit')) {
             return true;
         }
 
@@ -223,7 +218,7 @@ class UserController extends Controller
         if ($schoolId === null) {
             return response()->json(['message' => 'Requête invalide'], 400);
         }
-        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($schoolId, ['director', 'admin'])) {
+        if (!$caller->is_super_admin && !$this->callerCan($schoolId, 'staff.view')) {
             return $this->denyAccess('user.index');
         }
 
@@ -268,7 +263,7 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user)
     {
-        if (!$this->canManageUser($user)) {
+        if (!$this->canManageUser($user, 'staff.manage')) {
             return $this->denyAccess('user.update', ['target_id' => $user->id]);
         }
 
@@ -279,7 +274,7 @@ class UserController extends Controller
 
     public function show(User $user)
     {
-        if (!$this->canManageUser($user)) {
+        if (!$this->canManageUser($user, 'staff.view')) {
             return $this->denyAccess('user.show', ['target_id' => $user->id]);
         }
         return $user->load('roles');
@@ -287,7 +282,7 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
-        if (!$this->canManageUser($user)) {
+        if (!$this->canManageUser($user, 'staff.manage')) {
             return $this->denyAccess('user.destroy', ['target_id' => $user->id]);
         }
         if ($user->is_super_admin) {
@@ -372,7 +367,7 @@ class UserController extends Controller
      */
     public function getUserRoles(User $user)
     {
-        if (!$this->canManageUser($user)) {
+        if (!$this->canManageUser($user, 'staff.view')) {
             return $this->denyAccess('user.roles', ['target_id' => $user->id]);
         }
         return [
@@ -442,7 +437,7 @@ class UserController extends Controller
             return $this->denyAccess('user.classroom_users.cross_tenant', ['classroom_id' => $classroom->id]);
         }
         $caller = auth()->user();
-        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($classroom->school_id, ['director', 'admin'])) {
+        if (!$caller->is_super_admin && !$this->callerCan($classroom->school_id, 'staff.view')) {
             return $this->denyAccess('user.classroom_users.no_role', ['classroom_id' => $classroom->id]);
         }
 
@@ -479,7 +474,7 @@ class UserController extends Controller
         }
 
         $caller = auth()->user();
-        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($school->id, ['director', 'admin'])) {
+        if (!$caller->is_super_admin && !$this->callerCan($school->id, 'staff.view')) {
             return $this->denyAccess('user.school_users.no_role', ['school_id' => $school->id]);
         }
 
@@ -521,7 +516,7 @@ class UserController extends Controller
         }
 
         $caller = auth()->user();
-        if (!$caller->is_super_admin && !$this->callerHasSchoolRole($schoolId, ['director', 'admin'])) {
+        if (!$caller->is_super_admin && !$this->callerCan($schoolId, 'staff.view')) {
             return $this->denyAccess('user.list_teachers.no_role', ['school_id' => $schoolId]);
         }
 

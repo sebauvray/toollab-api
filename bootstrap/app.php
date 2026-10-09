@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\SchoolContext;
 use App\Http\Middleware\SchoolYearContext;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'checkrole' => CheckRole::class,
+            'permission' => CheckPermission::class,
             'superadmin' => SuperAdmin::class,
             'school' => SchoolContext::class,
             'schoolyear' => SchoolYearContext::class,
@@ -48,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SchoolContext::class,
             SchoolYearContext::class,
             CheckRole::class,
+            CheckPermission::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \Illuminate\Auth\Middleware\Authorize::class,
         ]);

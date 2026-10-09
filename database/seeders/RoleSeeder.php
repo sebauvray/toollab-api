@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Role;
+use App\Services\SchoolRoleProvisioner;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -23,7 +24,9 @@ class RoleSeeder extends Seeder
         ];
 
         foreach ($roles as $role) {
-            Role::firstOrCreate(['slug' => $role['slug']], ['name' => $role['name']]);
+            Role::global()->firstOrCreate(['slug' => $role['slug']], ['name' => $role['name']]);
         }
+
+        app(SchoolRoleProvisioner::class)->syncPermissions();
     }
 }

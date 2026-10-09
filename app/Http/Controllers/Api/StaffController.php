@@ -23,21 +23,7 @@ class StaffController extends Controller
 
     private function canManageRole(User $caller, int $schoolId, string $roleSlug): bool
     {
-        if ($caller->is_super_admin) {
-            return true;
-        }
-
-        $callerRoles = UserRole::query()
-            ->where('user_id', $caller->id)
-            ->where('roleable_type', 'school')
-            ->where('roleable_id', $schoolId)
-            ->whereNotNull('accepted_at')
-            ->whereHas('role', fn($query) => $query->whereIn('slug', ['director', 'admin']))
-            ->with('role:id,slug')
-            ->get()
-            ->pluck('role.slug');
-
-        return StaffRolePermissions::canManage($callerRoles->all(), $roleSlug);
+        return StaffRolePermissions::canManage($caller, $schoolId, $roleSlug);
     }
 
     // Le soft delete de user_roles ne concerne que les liens famille/classe ; un reliquat
@@ -399,19 +385,8 @@ class StaffController extends Controller
         }
 
         if (!$caller->is_super_admin) {
-            $callerRoles = UserRole::query()
-                ->where('user_id', $caller->id)
-                ->where('roleable_type', 'school')
-                ->where('roleable_id', $schoolId)
-                ->whereNotNull('accepted_at')
-                ->whereHas('role', fn($query) => $query->whereIn('slug', ['director', 'admin']))
-                ->with('role:id,slug')
-                ->get()
-                ->pluck('role.slug')
-                ->all();
-
             foreach ($targetRoleSlugs as $slug) {
-                if (!StaffRolePermissions::canManage($callerRoles, $slug)) {
+                if (!StaffRolePermissions::canManage($caller, $schoolId, $slug)) {
                     \Illuminate\Support\Facades\Log::warning('StaffController.removeUserFromSchool: forbidden', [
                         'caller_id' => $caller->id,
                         'target_user_id' => $targetUserId,
