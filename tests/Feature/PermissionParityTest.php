@@ -108,6 +108,12 @@ dataset('routes', [
     ['GET', '/api/tarification/cursus', ['director', 'admin']],
     ['GET', '/api/statistics/overview', ['director', 'admin']],
     ['GET', '/api/teacher/classrooms', ['teacher']],
+    // Routes fermées le 2026-10-09 : avant, tout membre de l'école y accédait,
+    // professeur et rôle sans droit compris.
+    ['GET', '/api/users/search?query=ma', ['director', 'admin', 'registar']],
+    ['POST', '/api/families', ['director', 'admin', 'registar']],
+    ['GET', '/api/classrooms', ['director', 'admin', 'registar']],
+    ['GET', '/api/classrooms/{classroom}', ['director', 'admin', 'registar']],
 ]);
 
 it('garde les mêmes accès pour chaque rôle par défaut', function (string $method, string $uri, array $allowed) {
@@ -157,3 +163,35 @@ it('ne laisse pas un admin nommer un autre admin', function () {
         ->postJson('/api/users/add-role', ['user_id' => $this->member->id, 'school_id' => $this->school->id, 'role' => 'admin'])
         ->assertForbidden();
 });
+
+it('refuse tout à un rôle personnalisé sans aucun droit', function (string $method, string $uri) {
+    $role = Role::create(['school_id' => $this->school->id, 'name' => 'Bénévole', 'slug' => 'benevole']);
+    $user = parityUser('benevole');
+    UserRole::create([
+        'user_id' => $user->id,
+        'role_id' => $role->id,
+        'roleable_type' => 'school',
+        'roleable_id' => $this->school->id,
+        'accepted_at' => now(),
+    ]);
+
+    $uri = strtr($uri, [
+        '{school}' => $this->school->id,
+        '{year}' => $this->year->id,
+        '{family}' => $this->family->id,
+        '{classroom}' => $this->classroom->id,
+        '{member}' => $this->member->id,
+    ]);
+
+    // Corps valide pour add-role : sa validation passe avant le contrôle des droits.
+    $payload = $uri === '/api/users/add-role'
+        ? ['user_id' => $this->member->id, 'school_id' => $this->school->id, 'role' => 'registar']
+        : [];
+
+    $status = $this->actingAs($user, 'sanctum')
+        ->withHeaders(['X-School-Id' => (string) $this->school->id])
+        ->json($method, $uri, $payload)
+        ->baseResponse->getStatusCode();
+
+    expect($status)->toBeIn([401, 403], "benevole {$method} {$uri} → {$status}");
+})->with('routes');

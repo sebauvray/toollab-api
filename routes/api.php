@@ -78,7 +78,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::prefix('users')->group(function () {
             // search est year-scopé : élèves inscrits dans l'année sélectionnée, plus les
             // élèves jamais affectés à une classe (une famille existe avant toute affectation).
-            Route::middleware('schoolyear')->get('/search', [UserController::class, 'searchStudents']);
+            Route::middleware(['schoolyear', 'permission:families.view,enrollments.manage'])->get('/search', [UserController::class, 'searchStudents']);
             Route::get('/', [UserController::class, 'getAllUsersWithRoles']);
             Route::get('/by-context', [UserController::class, 'getUsersByContextAndRole']);
             Route::get('/teachers', [UserController::class, 'listTeachers']);
@@ -145,7 +145,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
                     Route::post('/{familyId}/purge', [FamilyDeletionController::class, 'purge'])->whereNumber('familyId');
                 });
                 Route::get('/', [FamilyController::class, 'index']);
-                Route::post('/', [FamilyController::class, 'store']);
+                Route::middleware('permission:families.edit')->post('/', [FamilyController::class, 'store']);
                 Route::get('/{family}', [FamilyController::class, 'show']);
                 Route::post('/{family}/comments', [FamilyController::class, 'addComment']);
                 Route::post('/{family}/students', [FamilyController::class, 'addStudents']);
@@ -166,8 +166,12 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             });
 
             Route::prefix('classrooms')->group(function () {
-                Route::get('/', [ClassroomController::class, 'index']);
-                Route::get('/{classroom}', [ClassroomController::class, 'show']);
+                // Lecture des classes : écrans d'inscription, de cursus et de suivi.
+                // Les professeurs passent par /teacher, limité à leurs classes.
+                Route::middleware('permission:classrooms.manage,classrooms.supervise,enrollments.manage,cursus.manage')->group(function () {
+                    Route::get('/', [ClassroomController::class, 'index']);
+                    Route::get('/{classroom}', [ClassroomController::class, 'show']);
+                });
                 Route::middleware('permission:classrooms.manage')->group(function () {
                     Route::post('/', [ClassroomController::class, 'store']);
                     Route::put('/{classroom}', [ClassroomController::class, 'update']);
