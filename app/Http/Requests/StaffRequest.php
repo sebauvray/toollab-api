@@ -29,6 +29,7 @@ class StaffRequest extends FormRequest
             })
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
+            ->whereNotNull('accepted_at')
             ->with('role')
             ->get()
             ->pluck('role.slug');

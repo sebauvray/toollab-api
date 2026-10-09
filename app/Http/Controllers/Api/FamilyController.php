@@ -57,6 +57,7 @@ class FamilyController extends Controller
         $isStaff = UserRole::where('user_id', $caller->id)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $family->school_id)
+            ->whereNotNull('accepted_at')
             ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin', 'registar']))
             ->exists();
         if ($isStaff) return true;
@@ -109,6 +110,7 @@ class FamilyController extends Controller
         $isStaff = $caller && ($caller->is_super_admin || UserRole::where('user_id', $caller->id)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
+            ->whereNotNull('accepted_at')
             ->whereHas('role', fn ($q) => $q->whereIn('slug', ['director', 'admin', 'registar']))
             ->exists());
 

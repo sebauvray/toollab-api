@@ -33,6 +33,7 @@ class UserController extends Controller
         $callerAdminSchoolIds = UserRole::query()
             ->where('user_id', $caller->id)
             ->where('roleable_type', 'school')
+            ->whereNotNull('accepted_at')
             ->whereHas('role', fn($q) => $q->whereIn('slug', ['director', 'admin']))
             ->pluck('roleable_id');
 
@@ -80,6 +81,7 @@ class UserController extends Controller
             ->where('user_id', auth()->id())
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
+            ->whereNotNull('accepted_at')
             ->whereHas('role', fn($q) => $q->whereIn('slug', $slugs))
             ->exists();
     }

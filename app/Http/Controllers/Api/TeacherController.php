@@ -25,6 +25,7 @@ class TeacherController extends Controller
             ->where('role_id', $teacherRoleId)
             ->where('roleable_type', 'school')
             ->where('roleable_id', $schoolId)
+            ->whereNotNull('accepted_at')
             ->exists();
     }
 
