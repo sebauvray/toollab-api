@@ -69,6 +69,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/admin/users/{user}/enable', [UserAdminController::class, 'enable'])->whereNumber('user');
         Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
         Route::get('/admin/errors', [ErrorLogController::class, 'index']);
+        Route::get('/admin/database', [AdminDashboardController::class, 'database']);
         Route::get('/admin/errors/{id}', [ErrorLogController::class, 'show'])->whereNumber('id');
         Route::post('/admin/errors/{id}/resolve', [ErrorLogController::class, 'resolve'])->whereNumber('id');
         Route::post('/admin/errors/{id}/reopen', [ErrorLogController::class, 'reopen'])->whereNumber('id');

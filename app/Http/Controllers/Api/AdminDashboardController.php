@@ -259,6 +259,28 @@ class AdminDashboardController extends Controller
         ]);
     }
 
+    /** Taille de la base ; prend au passage la photo quotidienne des tables. */
+    private function databaseSize(): ?array
+    {
+        try {
+            \App\Support\TableSizes::snapshotToday();
+
+            return \App\Support\TableSizes::summary();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** Détail des tables (page /admin/database). */
+    public function database(): JsonResponse
+    {
+        \App\Support\TableSizes::snapshotToday();
+
+        return response()->json(\App\Support\TableSizes::report());
+    }
+
     private function kpis(): array
     {
         $roles = DB::table('user_roles')
@@ -455,6 +477,7 @@ class AdminDashboardController extends Controller
             ],
             'mail' => config('mail.default'),
             'errors' => ErrorLogController::summary(),
+            'database_size' => $this->databaseSize(),
             'server_time' => now()->toIso8601String(),
         ];
     }
