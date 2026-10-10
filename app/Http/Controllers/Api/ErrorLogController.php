@@ -78,6 +78,12 @@ class ErrorLogController extends Controller
     }
 
     /** Résumé pour le tableau de bord : volume 24 h, erreurs ouvertes, e-mails en échec. */
+    /** En-tête de la page /admin/errors. */
+    public function summaryJson(): \Illuminate\Http\JsonResponse
+    {
+        return response()->json(self::summary());
+    }
+
     public static function summary(): array
     {
         return [

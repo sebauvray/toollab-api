@@ -61,6 +61,9 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::middleware('superadmin')->group(function () {
         Route::post('/schools', [SchoolController::class, 'store']);
         Route::get('/admin/dashboard', [AdminDashboardController::class, 'index']);
+        Route::get('/admin/schools-health', [AdminDashboardController::class, 'schools']);
+        Route::get('/admin/schools/{school}/overview', [AdminDashboardController::class, 'schoolOverview'])->whereNumber('school');
+        Route::get('/admin/counters', [AdminDashboardController::class, 'counters']);
         Route::get('/admin/users', [AdminDashboardController::class, 'users']);
         Route::get('/admin/users/{user}', [AdminDashboardController::class, 'showUser'])->whereNumber('user');
         Route::post('/admin/users/{user}/impersonate', [ImpersonationController::class, 'start'])->whereNumber('user');
@@ -69,6 +72,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/admin/users/{user}/enable', [UserAdminController::class, 'enable'])->whereNumber('user');
         Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
         Route::get('/admin/errors', [ErrorLogController::class, 'index']);
+        Route::get('/admin/errors/summary', [ErrorLogController::class, 'summaryJson']);
         Route::get('/admin/database', [AdminDashboardController::class, 'database']);
         Route::get('/admin/errors/{id}', [ErrorLogController::class, 'show'])->whereNumber('id');
         Route::post('/admin/errors/{id}/resolve', [ErrorLogController::class, 'resolve'])->whereNumber('id');

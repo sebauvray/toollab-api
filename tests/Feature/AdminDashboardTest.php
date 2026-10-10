@@ -133,3 +133,50 @@ it('classe un ancien staff dans « sans affectation »', function () {
     $this->actingAs($this->admin, 'sanctum')->getJson('/api/admin/dashboard')
         ->assertJsonPath('todo.unassigned_users_count', 1);
 });
+
+it('compte les connexions par jour et les utilisateurs distincts', function () {
+    $login = fn () => $this->postJson('/api/login', ['email' => 'root@admin-test.com', 'password' => 'password'])->assertCreated();
+    $login();
+    $login();
+
+    $trends = $this->actingAs($this->admin, 'sanctum')->getJson('/api/admin/dashboard')->assertOk()->json('trends');
+
+    expect($trends['dates'])->toHaveCount(30)
+        ->and(end($trends['dates']))->toBe(today()->toDateString())
+        ->and(end($trends['logins']))->toBe(2)
+        ->and(end($trends['unique_users']))->toBe(1)
+        ->and(end($trends['schools']))->toBe(1)
+        ->and($trends['logins_since'])->toBe(today()->toDateString());
+});
+
+it('renvoie les compteurs de navigation', function () {
+    $this->actingAs($this->admin, 'sanctum')
+        ->getJson('/api/admin/counters')
+        ->assertOk()
+        ->assertExactJson(['schools_to_watch' => 1, 'pending_invitations' => 0, 'open_errors' => 0]);
+});
+
+it('renvoie la fiche école avec son équipe et la liste de santé', function () {
+    $school = School::first();
+    $prof = User::create([
+        'first_name' => 'Amina', 'last_name' => 'Benali', 'email' => 'amina@admin-test.com',
+        'password' => 'password', 'access' => true,
+    ]);
+    \App\Models\UserRole::create([
+        'user_id' => $prof->id,
+        'role_id' => \App\Models\Role::where('slug', 'teacher')->value('id'),
+        'roleable_type' => 'school', 'roleable_id' => $school->id, 'accepted_at' => now(),
+    ]);
+
+    $this->actingAs($this->admin, 'sanctum')
+        ->getJson("/api/admin/schools/{$school->id}/overview")
+        ->assertOk()
+        ->assertJsonPath('health.teachers', 1)
+        ->assertJsonPath('staff.0.email', 'amina@admin-test.com')
+        ->assertJsonPath('staff.0.pending', false);
+
+    $this->actingAs($this->admin, 'sanctum')
+        ->getJson('/api/admin/schools-health')
+        ->assertOk()
+        ->assertJsonPath('0.name', 'École Test');
+});

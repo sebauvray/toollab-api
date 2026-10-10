@@ -42,6 +42,7 @@ class AuthController extends Controller
             ], 403);
         }
 
+        \App\Support\DailyLogins::record($user);
         $user->forceFill(['last_login_at' => now()])->saveQuietly();
         $token = $user->createToken('new_token')->plainTextToken;
 

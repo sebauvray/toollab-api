@@ -27,7 +27,97 @@ class AdminDashboardController extends Controller
             'todo' => $this->todo(),
             'activity' => AuditLogController::recent(),
             'system' => $this->system(),
+            'trends' => $this->trends(),
         ]);
+    }
+
+    /** Liste des écoles avec leurs indicateurs de santé (page /admin/schools). */
+    public function schools(): JsonResponse
+    {
+        return response()->json($this->schoolsHealth());
+    }
+
+    /** Fiche école : indicateurs de santé et équipe (page /admin/schools/{id}). */
+    public function schoolOverview(School $school): JsonResponse
+    {
+        $health = collect($this->schoolsHealth())->firstWhere('id', $school->id);
+
+        $staff = DB::table('user_roles')
+            ->join('users', 'users.id', '=', 'user_roles.user_id')
+            ->join('roles', 'roles.id', '=', 'user_roles.role_id')
+            ->where('user_roles.roleable_type', 'school')
+            ->where('user_roles.roleable_id', $school->id)
+            ->orderByRaw('user_roles.accepted_at IS NULL')
+            ->orderByRaw('users.last_login_at IS NULL')
+            ->orderByDesc('users.last_login_at')
+            ->get([
+                'users.id', 'users.first_name', 'users.last_name', 'users.email', 'users.access', 'users.last_login_at',
+                'roles.name as role', 'roles.slug', 'user_roles.accepted_at',
+            ])
+            ->groupBy('id')
+            ->map(fn ($rows) => [
+                'id' => $rows[0]->id,
+                'first_name' => $rows[0]->first_name,
+                'last_name' => $rows[0]->last_name,
+                'email' => $rows[0]->email,
+                'access' => (bool) $rows[0]->access,
+                'last_login_at' => $rows[0]->last_login_at,
+                'roles' => $rows->pluck('role')->unique()->values(),
+                'pending' => $rows->every(fn ($r) => $r->accepted_at === null),
+            ])
+            ->values();
+
+        return response()->json([
+            'health' => $health,
+            'staff' => $staff,
+            'active_staff_30d' => $staff->filter(fn ($u) => $u['last_login_at'] && Carbon::parse($u['last_login_at'])->gte(now()->subDays(30)))->count(),
+        ]);
+    }
+
+    /** Compteurs de la navigation admin : requêtes légères, appelées à chaque page. */
+    public function counters(): JsonResponse
+    {
+        return response()->json([
+            'schools_to_watch' => collect($this->schoolsHealth())->filter(fn ($s) => $s['access'] && $s['alerts'])->count(),
+            'pending_invitations' => DB::table('user_roles')->whereNull('accepted_at')->where('roleable_type', 'school')->count(),
+            'open_errors' => DB::table('error_groups')->whereNull('resolved_at')->count(),
+        ]);
+    }
+
+    /**
+     * Séries sur 30 jours pour les indicateurs du tableau de bord.
+     * Les cumuls (écoles, staff) sont reconstitués à partir des dates de création ;
+     * les connexions viennent du compteur journalier (historique depuis sa mise en place).
+     */
+    private function trends(): array
+    {
+        $days = 30;
+        $start = today()->subDays($days - 1);
+        $dates = collect(range(0, $days - 1))->map(fn ($i) => $start->copy()->addDays($i));
+
+        $cumulative = function ($query, string $column) use ($dates, $start) {
+            $before = (clone $query)->where($column, '<', $start)->count();
+            $perDay = (clone $query)->where($column, '>=', $start)
+                ->selectRaw("DATE($column) as d, COUNT(*) as n")->groupBy('d')->pluck('n', 'd');
+            $running = $before;
+
+            return $dates->map(function ($d) use (&$running, $perDay) {
+                $running += (int) ($perDay[$d->toDateString()] ?? 0);
+
+                return $running;
+            })->all();
+        };
+
+        $logins = \App\Support\DailyLogins::series($days);
+
+        return [
+            'dates' => $dates->map->toDateString()->all(),
+            'schools' => $cumulative(DB::table('schools'), 'created_at'),
+            'staff' => $cumulative(DB::table('users')->whereNotNull('became_staff_at'), 'became_staff_at'),
+            'logins' => array_column($logins, 'logins'),
+            'unique_users' => array_column($logins, 'unique_users'),
+            'logins_since' => \App\Support\DailyLogins::since(),
+        ];
     }
 
     /**
@@ -418,6 +508,7 @@ class AdminDashboardController extends Controller
                     ->where('user_roles.roleable_type', 'school');
             })
             ->whereNull('user_roles.accepted_at')
+            ->where('user_roles.roleable_type', 'school')
             ->where('user_roles.created_at', '<', now()->subDays(3))
             ->orderBy('user_roles.created_at')
             ->limit(20)
@@ -433,7 +524,8 @@ class AdminDashboardController extends Controller
             ->get(['id', 'first_name', 'last_name', 'email', 'created_at']);
 
         return [
-            'pending_invitations_count' => DB::table('user_roles')->whereNull('accepted_at')->count(),
+            // Les rôles famille n'ont jamais d'accepted_at : seules les invitations d'équipe comptent
+            'pending_invitations_count' => DB::table('user_roles')->whereNull('accepted_at')->where('roleable_type', 'school')->count(),
             'pending_invitations' => $pendingInvitations,
             'expired_tokens_count' => DB::table('invitation_tokens')->where('expires_at', '<', now())->count(),
             'unassigned_users' => $orphans,
