@@ -29,9 +29,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'superadmin' => SuperAdmin::class,
             'school' => SchoolContext::class,
             'schoolyear' => SchoolYearContext::class,
+            'feature' => \App\Http\Middleware\RequireFeature::class,
         ]);
 
         $middleware->append(SecurityHeaders::class);
+        $middleware->appendToGroup('api', \App\Http\Middleware\ImpersonationReadOnly::class);
 
         // SchoolContext doit passer avant SubstituteBindings sinon le Route
         // Model Binding s'exécute sans contexte et le global scope renvoie 0 ligne.
@@ -44,6 +46,8 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
             \Illuminate\Auth\Middleware\Authenticate::class,
             \Illuminate\Session\Middleware\AuthenticateSession::class,
+            // Lecture seule « en tant que » : avant tout contrôle métier
+            \App\Http\Middleware\ImpersonationReadOnly::class,
             \Illuminate\Routing\Middleware\ThrottleRequests::class,
             \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
             SuperAdmin::class,
@@ -51,6 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SchoolYearContext::class,
             CheckRole::class,
             CheckPermission::class,
+            \App\Http\Middleware\RequireFeature::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \Illuminate\Auth\Middleware\Authorize::class,
         ]);

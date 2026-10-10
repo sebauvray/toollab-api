@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Audit;
 use App\Exceptions\DirectorHandoverException;
 use App\Models\DirectorHandover;
 use App\Models\InvitationToken;
@@ -86,6 +87,7 @@ class DirectorHandoverService
             $handover->save();
 
             $this->sendInvitation($handover, $school, $director, $token);
+            Audit::log('handover.initiated', $school->id, $director, ['to' => $email, 'outgoing_role' => $outgoingRole], $director);
 
             return $handover;
         });
@@ -119,6 +121,7 @@ class DirectorHandoverService
             $handover->status = DirectorHandover::STATUS_CANCELLED;
             $handover->responded_at = now();
             $handover->save();
+            Audit::log('handover.cancelled', $schoolId, null, ['to' => $handover->email]);
 
             return $handover;
         });
@@ -188,6 +191,11 @@ class DirectorHandoverService
             $handover->to_user_id = $user->id;
             $handover->responded_at = now();
             $handover->save();
+            // Flux public par jeton : l'acteur est le nouveau directeur, le sujet l'ancien
+            Audit::log('handover.accepted', $school->id, $outgoing, [
+                'new_director' => $user->email,
+                'outgoing_role' => $handover->outgoing_role,
+            ], $user);
 
             $outgoing->notify(new DirectorHandoverStatusNotification(
                 $school->name,
@@ -215,6 +223,7 @@ class DirectorHandoverService
             $handover->status = DirectorHandover::STATUS_DECLINED;
             $handover->responded_at = now();
             $handover->save();
+            Audit::log('handover.declined', $handover->school_id, $handover->fromUser, ['to' => $handover->email]);
 
             $school = School::find($handover->school_id);
             $handover->fromUser?->notify(new DirectorHandoverStatusNotification(
@@ -305,6 +314,7 @@ class DirectorHandoverService
         $this->schoolRolesQuery($user->id, $schoolId)
             ->whereNull('accepted_at')
             ->update(['accepted_at' => now()]);
+        $user->markAsStaff();
 
         $this->revokeSchoolRoles($user->id, $schoolId, ['admin', 'registar']);
     }

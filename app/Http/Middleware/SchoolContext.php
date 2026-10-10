@@ -2,8 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Classroom;
-use App\Models\Family;
 use App\Models\School;
 use App\Models\UserRole;
 use Closure;
@@ -33,7 +31,9 @@ class SchoolContext
 
         $schoolId = (int) $raw;
 
-        if (!School::whereKey($schoolId)->exists()
+        $school = School::find($schoolId);
+
+        if (!$school
             || (!$user->is_super_admin && !$this->userHasAccess($user->id, $schoolId))
         ) {
             Log::warning('SchoolContext: access denied', [
@@ -44,6 +44,14 @@ class SchoolContext
             return response()->json(['message' => 'Vous n’avez pas accès à cette école.'], 403);
         }
 
+        // École suspendue par le super-admin : plus aucun accès pour son équipe
+        if ($school->isSuspended() && !$user->is_super_admin) {
+            return response()->json([
+                'message' => 'Cet établissement est suspendu. Contactez le support Toollab.',
+                'school_suspended' => true,
+            ], 403);
+        }
+
         $request->attributes->set('current_school_id', $schoolId);
 
         return $next($request);
@@ -51,46 +59,13 @@ class SchoolContext
 
     private function userHasAccess(int $userId, int $schoolId): bool
     {
-        // Une adhésion à l'école n'ouvre l'accès qu'une fois l'invitation acceptée
-        // (accepted_at non null). Tant qu'elle est en attente, aucun accès.
-        $direct = UserRole::query()
+        // Seul le staff accède à une école (adhésion acceptée). Les membres de
+        // famille ou de classe n'ont pas d'espace dans l'outil.
+        return UserRole::query()
             ->where('user_id', $userId)
-            ->where('roleable_type', 'school')
+            ->whereIn('roleable_type', ['school', School::class])
             ->where('roleable_id', $schoolId)
             ->whereNotNull('accepted_at')
             ->exists();
-        if ($direct) {
-            return true;
-        }
-
-        // withoutGlobalScopes : currentSchoolId() n'est pas encore set ici,
-        // le scope fail-closed retournerait 0 rows et bloquerait l'accès.
-        $familyIds = Family::query()->withoutGlobalScopes()
-            ->where('school_id', $schoolId)->pluck('id');
-        if ($familyIds->isNotEmpty()) {
-            $viaFamily = UserRole::query()
-                ->where('user_id', $userId)
-                ->where('roleable_type', 'family')
-                ->whereIn('roleable_id', $familyIds)
-                ->exists();
-            if ($viaFamily) {
-                return true;
-            }
-        }
-
-        $classroomIds = Classroom::query()->withoutGlobalScopes()
-            ->where('school_id', $schoolId)->pluck('id');
-        if ($classroomIds->isNotEmpty()) {
-            $viaClassroom = UserRole::query()
-                ->where('user_id', $userId)
-                ->where('roleable_type', 'classroom')
-                ->whereIn('roleable_id', $classroomIds)
-                ->exists();
-            if ($viaClassroom) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

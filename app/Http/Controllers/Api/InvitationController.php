@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Models\InvitationToken;
 use App\Models\School;
@@ -94,6 +95,10 @@ class InvitationController extends Controller
             ->whereNull('accepted_at')
             ->update(['accepted_at' => now()]);
 
+        if ($updated) {
+            $user->markAsStaff();
+        }
+
         if (!$updated) {
             return response()->json([
                 'message' => 'Aucune invitation en attente pour cette école'
@@ -105,6 +110,7 @@ class InvitationController extends Controller
             ->delete();
 
         $school = School::find($request->school_id);
+        Audit::log('invitation.accepted', (int) $request->school_id, $user);
 
         return response()->json([
             'message' => 'Vous avez rejoint ' . ($school?->name ?? 'l\'école') . '.',
@@ -136,6 +142,8 @@ class InvitationController extends Controller
         InvitationToken::where('email', $user->email)
             ->where('school_id', $request->school_id)
             ->delete();
+
+        Audit::log('invitation.declined', (int) $request->school_id, $user);
 
         return response()->json([
             'message' => 'Invitation refusée.',
@@ -194,6 +202,7 @@ class InvitationController extends Controller
                 ->where('roleable_id', $token->school_id)
                 ->whereNull('accepted_at')
                 ->update(['accepted_at' => now()]);
+            $user->markAsStaff();
         }
 
         $user->tokens()->delete();

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Models\Classroom;
 use App\Models\ClassSchedule;
@@ -133,6 +134,7 @@ class SchoolYearController extends Controller
         $schoolYear->closed_at = now();
         $schoolYear->outcomes_open = false;
         $schoolYear->save();
+        Audit::log('school_year.closed', $schoolYear->school_id, $schoolYear, ['label' => $schoolYear->label]);
 
         return response()->json([
             'status' => 'success',

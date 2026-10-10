@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StaffRequest;
 use App\Models\InvitationToken;
@@ -206,6 +207,10 @@ class StaffController extends Controller
         // Tant que l'invitation n'est pas acceptée, l'école ne doit pas voir le nom.
         $pending = !$alreadyAccepted;
 
+        if (!empty($createdRoleSlugs)) {
+            Audit::log($pending ? 'staff.invited' : 'staff.role_added', $school->id, $user, ['roles' => array_values($createdRoleSlugs)]);
+        }
+
         return response()->json([
             'message' => $message,
             'user' => [
@@ -270,6 +275,7 @@ class StaffController extends Controller
 
         if ($userRole->wasRecentlyCreated) {
             $user = User::findOrFail($validated['user_id']);
+            Audit::log('staff.role_added', $school->id, $user, ['roles' => [$roleSlug]]);
             $user->notify(new StaffRoleChangedNotification(
                 $school->name,
                 'added',
@@ -346,6 +352,7 @@ class StaffController extends Controller
             ));
 
             DB::commit();
+            Audit::log('staff.role_removed', $school->id, $user, ['roles' => [$roleSlug]]);
 
             return response()->json([
                 'message' => 'Le rôle de l\'utilisateur pour cette école a été supprimé'
@@ -418,6 +425,7 @@ class StaffController extends Controller
             ->forceDelete();
 
         $school = School::findOrFail($schoolId);
+        Audit::log('staff.removed_from_school', $school->id, $user, ['roles' => array_values($targetRoleSlugs)]);
         $user->notify(new StaffRoleChangedNotification(
             $school->name,
             'removed_from_school',

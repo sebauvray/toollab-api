@@ -24,6 +24,25 @@ class AuthController extends Controller
             return response($response, 401);
         }
 
+        // Compte désactivé par le super-admin (après vérification du mot de passe :
+        // on ne révèle pas l'état d'un compte à qui ne connaît pas ses identifiants)
+        if (! $user->access) {
+            \Illuminate\Support\Facades\Log::info('Login refusé : compte désactivé', ['user_id' => $user->id]);
+
+            return response([
+                'message' => 'Votre compte a été désactivé. Contactez votre établissement ou le support Toollab.',
+            ], 403);
+        }
+
+        if (! $user->canLogIn()) {
+            \Illuminate\Support\Facades\Log::info('Login refusé : compte hors staff', ['user_id' => $user->id]);
+
+            return response([
+                'message' => "L'accès à Toollab est réservé aux équipes des écoles.",
+            ], 403);
+        }
+
+        $user->forceFill(['last_login_at' => now()])->saveQuietly();
         $token = $user->createToken('new_token')->plainTextToken;
 
         $response = [

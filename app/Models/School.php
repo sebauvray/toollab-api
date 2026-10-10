@@ -38,6 +38,30 @@ class School extends Model
         'vat_number',
     ];
 
+    /** Directeur en poste (adhésion acceptée), ou null. */
+    public function director(): ?User
+    {
+        return $this->userRoles()
+            ->whereNotNull('accepted_at')
+            ->whereHas('role', fn ($q) => $q->where('slug', 'director'))
+            ->with('user')
+            ->first()
+            ?->user;
+    }
+
+    public function isSuspended(): bool
+    {
+        return ! $this->access;
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'access' => 'boolean',
+            'suspended_at' => 'datetime',
+        ];
+    }
+
     public function userRoles()
     {
         return $this->morphMany(UserRole::class, 'roleable');

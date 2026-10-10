@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\AdminDashboardController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
@@ -7,14 +9,18 @@ use App\Http\Controllers\Api\DirectorHandoverController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\FamilyDeletionController;
 use App\Http\Controllers\Api\FamilyImportController;
+use App\Http\Controllers\Api\FeatureController;
+use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\SchoolAdminController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\TarificationController;
 use App\Http\Controllers\Api\TeacherController;
+use App\Http\Controllers\Api\UserAdminController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserPasswordController;
 use App\Http\Controllers\Api\SchoolYearController;
@@ -39,6 +45,7 @@ Route::middleware('throttle:token-check')->group(function () {
 
 Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('/impersonate/stop', [ImpersonationController::class, 'stop']);
 
     // Auth uniquement (sans contexte école)
     Route::get('/me/invitations', [InvitationController::class, 'myInvitations']);
@@ -52,11 +59,25 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('/schools/{school}', [SchoolController::class, 'show']);
     Route::middleware('superadmin')->group(function () {
         Route::post('/schools', [SchoolController::class, 'store']);
+        Route::get('/admin/dashboard', [AdminDashboardController::class, 'index']);
+        Route::get('/admin/users', [AdminDashboardController::class, 'users']);
+        Route::get('/admin/users/{user}', [AdminDashboardController::class, 'showUser'])->whereNumber('user');
+        Route::post('/admin/users/{user}/impersonate', [ImpersonationController::class, 'start'])->whereNumber('user');
+        Route::get('/admin/impersonations', [ImpersonationController::class, 'index']);
+        Route::post('/admin/users/{user}/disable', [UserAdminController::class, 'disable'])->whereNumber('user');
+        Route::post('/admin/users/{user}/enable', [UserAdminController::class, 'enable'])->whereNumber('user');
+        Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
+        Route::get('/admin/schools/{school}/features', [FeatureController::class, 'index'])->whereNumber('school');
+        Route::post('/admin/schools/{school}/suspend', [SchoolAdminController::class, 'suspend'])->whereNumber('school');
+        Route::post('/admin/schools/{school}/reactivate', [SchoolAdminController::class, 'reactivate'])->whereNumber('school');
+        Route::post('/admin/schools/{school}/contact-director', [SchoolAdminController::class, 'contactDirector'])->whereNumber('school');
+        Route::put('/admin/schools/{school}/features/{feature}', [FeatureController::class, 'update'])->whereNumber('school');
     });
     Route::middleware(['school', 'permission:school.settings.update'])->put('/schools/{school}', [SchoolController::class, 'update']);
 
     // Avec contexte école (header X-School-Id requis)
     Route::middleware('school')->group(function () {
+        Route::get('/features', [FeatureController::class, 'current']);
 
         // Endpoints année scolaire : school-scoped mais PAS year-scoped
         // (sinon impossible de lister les années archivées)
@@ -90,7 +111,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         // attribuer), écriture réservée à roles.manage.
         Route::prefix('roles')->group(function () {
             Route::middleware('permission:staff.manage,roles.manage')->get('/', [RoleController::class, 'index']);
-            Route::middleware('permission:roles.manage')->group(function () {
+            Route::middleware(['permission:roles.manage', 'feature:custom_roles'])->group(function () {
                 Route::post('/', [RoleController::class, 'store']);
                 Route::put('/{role}', [RoleController::class, 'update'])->whereNumber('role');
                 Route::delete('/{role}', [RoleController::class, 'destroy'])->whereNumber('role');

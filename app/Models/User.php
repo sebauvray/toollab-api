@@ -32,8 +32,56 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'last_login_at' => 'datetime',
+            'became_staff_at' => 'datetime',
+            'disabled_at' => 'datetime',
+            'access' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * L'outil est réservé au staff des écoles. Les familles (responsables, élèves)
+     * n'y ont pas d'espace pour l'instant, même si elles ont un compte.
+     */
+    private function schoolRoles()
+    {
+        return $this->roles()->whereIn('roleable_type', ['school', School::class]);
+    }
+
+    /** Staff d'au moins une école (adhésion acceptée). */
+    public function isStaff(): bool
+    {
+        return $this->schoolRoles()->whereNotNull('accepted_at')->exists();
+    }
+
+    /** Écoles où l'utilisateur est staff (adhésion acceptée). */
+    public function staffSchoolIds(): \Illuminate\Support\Collection
+    {
+        return $this->schoolRoles()->whereNotNull('accepted_at')->pluck('roleable_id')->unique()->values();
+    }
+
+    /** À appeler après une acceptation d'adhésion faite en requête de masse (sans événement Eloquent). */
+    public function markAsStaff(): void
+    {
+        static::whereKey($this->id)->whereNull('became_staff_at')->update(['became_staff_at' => now()]);
+    }
+
+    public function isStaffOf(int $schoolId): bool
+    {
+        return $this->schoolRoles()->where('roleable_id', $schoolId)->whereNotNull('accepted_at')->exists();
+    }
+
+    /**
+     * Super-admin, staff actuel ou ancien (il verra « aucune affectation »), ou
+     * invité staff qui doit pouvoir se connecter pour accepter. Les comptes
+     * purement famille (responsable, élève) n'ont pas accès à l'outil.
+     */
+    public function canLogIn(): bool
+    {
+        return $this->is_super_admin
+            || $this->became_staff_at !== null
+            || $this->schoolRoles()->exists();
     }
 
     public function getIsSuperAdminAttribute(): bool

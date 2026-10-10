@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Models\Classroom;
 use App\Models\Role;
 use App\Models\Scopes\BelongsToSchoolYearScope;
@@ -297,6 +298,7 @@ class UserController extends Controller
         if ($user->is_super_admin) {
             return $this->denyAccess('user.destroy.super_admin', ['target_id' => $user->id]);
         }
+        Audit::log('user.deleted', currentSchoolId(), $user);
         $user->delete();
         return response()->json(null, 204);
     }

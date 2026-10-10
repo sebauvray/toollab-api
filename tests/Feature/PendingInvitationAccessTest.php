@@ -5,9 +5,10 @@
 | Invitation staff en attente : aucun droit avant acceptation
 |--------------------------------------------------------------------------
 |
-| SchoolContext laisse entrer un parent de l'école même si son invitation staff
-| est en attente (accès via la famille). Les contrôles de rôle faits dans les
-| contrôleurs doivent donc, comme CheckRole, ignorer les rôles non acceptés.
+| L'outil est réservé au staff : seule une adhésion école acceptée ouvre une
+| école. Un parent invité comme staff peut se connecter (pour accepter) mais
+| ne voit rien tant qu'il n'a pas accepté ; un compte famille seul ne peut
+| pas se connecter.
 |
 */
 
@@ -71,15 +72,36 @@ beforeEach(function () {
     $this->headers = ['X-School-Id' => (string) $this->school->id];
 });
 
-it('ne liste que sa propre famille tant que l\'invitation est en attente', function () {
-    $ids = $this->actingAs($this->invited, 'sanctum')
+it('n\'ouvre pas l\'école via la famille tant que l\'invitation est en attente', function () {
+    $this->actingAs($this->invited, 'sanctum')
         ->withHeaders($this->headers)
         ->getJson('/api/families')
-        ->assertOk()
-        ->json('data.items.*.id');
+        ->assertForbidden();
 
-    expect($ids)->toContain($this->ownFamily->id)
-        ->not->toContain($this->otherFamily->id);
+    $this->actingAs($this->invited, 'sanctum')
+        ->getJson('/api/schools')
+        ->assertOk()
+        ->assertJsonCount(0);
+});
+
+it('laisse un invité se connecter pour accepter son invitation', function () {
+    $this->postJson('/api/login', ['email' => $this->invited->email, 'password' => 'password'])
+        ->assertCreated();
+});
+
+it('refuse la connexion à un compte famille sans rôle staff', function () {
+    $this->postJson('/api/login', ['email' => $this->otherParent->email, 'password' => 'password'])
+        ->assertForbidden()
+        ->assertJsonMissingPath('token');
+
+    expect($this->otherParent->tokens()->count())->toBe(0);
+});
+
+it('ferme l\'école à un compte famille déjà connecté', function () {
+    $this->actingAs($this->otherParent, 'sanctum')
+        ->withHeaders($this->headers)
+        ->getJson('/api/families')
+        ->assertForbidden();
 });
 
 it('refuse l\'accès à une autre famille tant que l\'invitation est en attente', function () {
@@ -131,4 +153,31 @@ it('donne l\'accès une fois l\'invitation acceptée', function () {
         ->withHeaders($this->headers)
         ->getJson("/api/families/{$this->otherFamily->id}")
         ->assertOk();
+});
+
+it('laisse un ancien staff se connecter, sans aucune école', function () {
+    $ancien = pendingUser('Ancien');
+    $role = UserRole::create([
+        'user_id' => $ancien->id, 'role_id' => Role::where('slug', 'teacher')->value('id'),
+        'roleable_type' => 'school', 'roleable_id' => $this->school->id, 'accepted_at' => now(),
+    ]);
+    $role->forceDelete();
+
+    $token = $this->postJson('/api/login', ['email' => $ancien->email, 'password' => 'password'])
+        ->assertCreated()
+        ->json('token');
+
+    app('auth')->forgetGuards();
+    $this->withToken($token)->getJson('/api/schools')->assertOk()->assertJsonCount(0);
+    $this->withToken($token)->withHeaders($this->headers)->getJson('/api/families')->assertForbidden();
+});
+
+it('ne fait pas d\'un invité qui refuse un ancien staff', function () {
+    $this->actingAs($this->invited, 'sanctum')
+        ->postJson('/api/me/invitations/decline', ['school_id' => $this->school->id])
+        ->assertSuccessful();
+
+    expect($this->invited->fresh()->became_staff_at)->toBeNull();
+    app('auth')->forgetGuards();
+    $this->postJson('/api/login', ['email' => $this->invited->email, 'password' => 'password'])->assertForbidden();
 });

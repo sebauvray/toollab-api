@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSchoolRequest;
 use App\Http\Requests\UpdateSchoolRequest;
@@ -29,28 +30,9 @@ class SchoolController extends Controller
             return School::orderBy('name')->get();
         }
 
-        // Seules les adhésions acceptées donnent accès à l'école (les invitations
-        // en attente n'apparaissent pas tant qu'elles ne sont pas acceptées).
-        $direct = \App\Models\UserRole::where('user_id', $user->id)
-            ->where('roleable_type', 'school')
-            ->whereNotNull('accepted_at')
-            ->pluck('roleable_id');
-
-        $familyRoleIds = \App\Models\UserRole::where('user_id', $user->id)
-            ->where('roleable_type', 'family')
-            ->pluck('roleable_id');
-        $viaFamily = \App\Models\Family::query()->withoutGlobalScopes()
-            ->whereIn('id', $familyRoleIds)
-            ->pluck('school_id');
-
-        $classroomRoleIds = \App\Models\UserRole::where('user_id', $user->id)
-            ->where('roleable_type', 'classroom')
-            ->pluck('roleable_id');
-        $viaClassroom = \App\Models\Classroom::query()->withoutGlobalScopes()
-            ->whereIn('id', $classroomRoleIds)
-            ->pluck('school_id');
-
-        $schoolIds = $direct->concat($viaFamily)->concat($viaClassroom)->unique();
+        // Seul le staff (adhésion acceptée) voit ses écoles ; les invitations
+        // en attente et les rattachements famille/classe n'ouvrent rien.
+        $schoolIds = $user->staffSchoolIds();
 
         return School::whereIn('id', $schoolIds)->orderBy('name')->get();
     }
@@ -139,6 +121,7 @@ class SchoolController extends Controller
             }
 
             DB::commit();
+            Audit::log('school.created', $school->id, $school, ['director' => $director->email]);
 
             $school->director = $director;
             $school->invitation_sent = $isNewDirector;
@@ -164,7 +147,7 @@ class SchoolController extends Controller
     public function show(School $school)
     {
         $user = auth()->user();
-        if (!$user->is_super_admin && !$this->userHasAccessTo($user->id, $school->id)) {
+        if (!$user->is_super_admin && !$user->isStaffOf($school->id)) {
             return response()->json(['message' => 'Accès refusé'], 403);
         }
 
@@ -179,34 +162,6 @@ class SchoolController extends Controller
         return $school;
     }
 
-    private function userHasAccessTo(int $userId, int $schoolId): bool
-    {
-        if (\App\Models\UserRole::where('user_id', $userId)
-            ->where('roleable_type', 'school')
-            ->where('roleable_id', $schoolId)
-            ->exists()) {
-            return true;
-        }
-
-        $familyIds = \App\Models\Family::query()->withoutGlobalScopes()
-            ->where('school_id', $schoolId)->pluck('id');
-        if ($familyIds->isNotEmpty()
-            && \App\Models\UserRole::where('user_id', $userId)
-                ->where('roleable_type', 'family')
-                ->whereIn('roleable_id', $familyIds)
-                ->exists()) {
-            return true;
-        }
-
-        $classroomIds = \App\Models\Classroom::query()->withoutGlobalScopes()
-            ->where('school_id', $schoolId)->pluck('id');
-        return $classroomIds->isNotEmpty()
-            && \App\Models\UserRole::where('user_id', $userId)
-                ->where('roleable_type', 'classroom')
-                ->whereIn('roleable_id', $classroomIds)
-                ->exists();
-    }
-
     /**
      * Update the specified resource in storage.
      */
@@ -218,6 +173,8 @@ class SchoolController extends Controller
         }
 
         $validatedData = $request->validated();
+        // La suspension passe exclusivement par /admin/schools/{id}/suspend (motif + audit)
+        unset($validatedData['access']);
 
         if ($request->hasFile('logo')) {
             if ($school->logo) {
@@ -228,7 +185,12 @@ class SchoolController extends Controller
             $validatedData['logo'] = $logoPath;
         }
 
-        $school->update($validatedData);
+        $school->fill($validatedData);
+        $changed = array_keys($school->getDirty());
+        $school->save();
+        if ($changed) {
+            Audit::log('school.updated', $school->id, $school, ['fields' => $changed]);
+        }
 
         return response()->json($school, 200);
     }
@@ -250,6 +212,7 @@ class SchoolController extends Controller
             Storage::disk('public')->delete($school->logo);
         }
 
+        Audit::log('school.deleted', $school->id, $school);
         $school->delete();
 
         return response()->json(null, 204);

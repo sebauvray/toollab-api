@@ -24,7 +24,13 @@ class SchoolFactory extends Factory
             'city' => fake()->city(),
             'country' => fake()->country(),
             'logo' => null,
-            'access' => fake()->boolean(),
+            'access' => true,
         ];
+    }
+
+    /** École suspendue par le super-admin (SchoolContext bloque son équipe). */
+    public function suspended(string $reason = 'Suspendue pour test'): static
+    {
+        return $this->state(fn () => ['access' => false, 'suspended_at' => now(), 'suspension_reason' => $reason]);
     }
 }

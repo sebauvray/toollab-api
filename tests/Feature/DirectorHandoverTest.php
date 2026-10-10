@@ -669,6 +669,7 @@ describe('déconnexion de l\'ancien directeur', function () {
         dhAcceptAsNewUser(dhInitiate($this->director, $this->school, 'nouveau@test.fr', $outgoing));
 
         app('auth')->forgetGuards();
+        // Ancien staff : il se connecte toujours, mais sans plus aucune école
         $login = $this->postJson('/api/login', ['email' => 'ancien.directeur@test.fr', 'password' => 'ancienmdp1'])->assertSuccessful();
 
         $roles = dhBearer($login->json('token'), $this->school)

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Models\Classroom;
 use App\Models\Family;
@@ -179,6 +180,8 @@ class FamilyDeletionController extends Controller
             'deleted_at' => $now->toDateTimeString(),
         ]);
 
+        Audit::log('family.deleted', $family->school_id, $family);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Famille supprimée. Vous pouvez annuler depuis la corbeille.',
@@ -342,6 +345,8 @@ class FamilyDeletionController extends Controller
             'caller_id' => auth()->id(),
         ]);
 
+        Audit::log('family.restored', $family->school_id, $family);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Famille restaurée.',
@@ -399,6 +404,8 @@ class FamilyDeletionController extends Controller
             'school_id' => $family->school_id,
             'caller_id' => auth()->id(),
         ]);
+
+        Audit::log('family.purged', $family->school_id, $family);
 
         return response()->json([
             'status' => 'success',

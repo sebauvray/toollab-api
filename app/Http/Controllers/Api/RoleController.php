@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Models\Permission;
 use App\Models\Role;
@@ -67,6 +68,7 @@ class RoleController extends Controller
 
             return $role;
         });
+        Audit::log('role.created', $schoolId, $role, ['permissions' => array_values($validated['permissions'])]);
 
         return response()->json($this->present($role->fresh('permissions'), 0, auth()->user(), $schoolId), 201);
     }
@@ -77,6 +79,7 @@ class RoleController extends Controller
         if ($deny = $this->denyIfNotEditable($role, $schoolId)) return $deny;
 
         $validated = $this->validateRole($request, $schoolId, $role);
+        $before = $role->permissions()->pluck('key')->all();
 
         DB::transaction(function () use ($role, $validated) {
             $role->update([
@@ -85,6 +88,13 @@ class RoleController extends Controller
             ]);
             $this->syncPermissions($role, $validated['permissions']);
         });
+
+        $after = $role->permissions()->pluck('key')->all();
+        Audit::log('role.updated', $schoolId, $role, array_filter([
+            'granted' => array_values(array_diff($after, $before)),
+            'revoked' => array_values(array_diff($before, $after)),
+            'renamed' => $role->wasChanged('name') ? $role->name : null,
+        ]));
 
         return response()->json($this->present($role->fresh('permissions'), $this->usersCount($role, $schoolId), auth()->user(), $schoolId));
     }
@@ -105,6 +115,7 @@ class RoleController extends Controller
             ], 409);
         }
 
+        Audit::log('role.deleted', $schoolId, $role);
         $role->delete();
 
         return response()->json(null, 204);
