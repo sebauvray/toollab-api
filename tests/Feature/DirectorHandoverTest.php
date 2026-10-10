@@ -707,3 +707,15 @@ describe('refus', function () {
         dhInitiate($this->director, $this->school, 'autre@test.fr');
     });
 });
+
+it("refuse de supprimer le compte d'un directeur en poste, y compris par lui-même", function () {
+    $admin = dhUser('admin@test.fr');
+    dhGrant($admin, 'admin', $this->school);
+
+    dhAs($admin, $this->school)->deleteJson("/api/users/{$this->director->id}")->assertStatus(422);
+    dhAs($this->director, $this->school)->deleteJson("/api/users/{$this->director->id}")->assertStatus(422);
+
+    expect(User::find($this->director->id))->not->toBeNull()
+        ->and(dhRoles($this->director, $this->school))->toContain('director');
+});
+

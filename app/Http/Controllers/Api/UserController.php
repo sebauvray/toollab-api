@@ -298,6 +298,18 @@ class UserController extends Controller
         if ($user->is_super_admin) {
             return $this->denyAccess('user.destroy.super_admin', ['target_id' => $user->id]);
         }
+        // Une école ne doit jamais se retrouver sans directeur : on passe par la passation
+        $directorOf = UserRole::query()
+            ->where('user_id', $user->id)
+            ->where('roleable_type', 'school')
+            ->whereNotNull('accepted_at')
+            ->whereHas('role', fn ($q) => $q->where('slug', 'director'))
+            ->exists();
+        if ($directorOf) {
+            return response()->json([
+                'message' => "Ce compte est directeur d'une école : transférez d'abord la direction (passation de direction) avant de le supprimer.",
+            ], 422);
+        }
         Audit::log('user.deleted', currentSchoolId(), $user);
         $user->delete();
         return response()->json(null, 204);
