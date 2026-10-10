@@ -6,6 +6,10 @@ use App\Models\User;
 use App\Models\UserInfo;
 use App\Observers\UserInfoObserver;
 use App\Observers\UserObserver;
+use App\Support\ErrorRecorder;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -32,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
         User::observe(UserObserver::class);
 
         $this->configureRateLimiters();
+        $this->trackCurrentJobForErrors();
 
         Relation::morphMap([
             'school' => 'App\Models\School',
@@ -44,6 +49,26 @@ class AppServiceProvider extends ServiceProvider
 //            'classroom' => 'App\Models\Classroom',
 //            'family' => 'App\Models\Family',
 //        ]);
+    }
+
+    /**
+     * Indique à ErrorRecorder quel job tourne : le worker signale l'exception
+     * après JobFailed, donc on ne réinitialise qu'au job suivant ou à la réussite.
+     */
+    private function trackCurrentJobForErrors(): void
+    {
+        Event::listen(JobProcessing::class, function (JobProcessing $event) {
+            $command = $event->job->payload()['data']['commandName'] ?? '';
+            ErrorRecorder::$currentJob = $event->job->resolveName();
+            ErrorRecorder::$currentJobIsMail = in_array($command, [
+                \Illuminate\Notifications\SendQueuedNotifications::class,
+                \Illuminate\Mail\SendQueuedMailable::class,
+            ], true);
+        });
+        Event::listen(JobProcessed::class, function () {
+            ErrorRecorder::$currentJob = null;
+            ErrorRecorder::$currentJobIsMail = false;
+        });
     }
 
     private function configureRateLimiters(): void

@@ -111,6 +111,7 @@ class PaiementController extends Controller
                 'vat_mention' => self::VAT_MENTIONS[$school->vat_mode] ?? null,
             ]);
         } catch (\Exception $e) {
+            report($e);
             Log::error('Facture PDF generation failed', [
                 'family_id' => $family->id,
                 'error' => $e->getMessage(),
@@ -136,6 +137,7 @@ class PaiementController extends Controller
                 'data' => $details,
             ]);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la récupération des détails de paiement',
@@ -189,6 +191,7 @@ class PaiementController extends Controller
                 ]);
             });
         } catch (\Exception $e) {
+            report($e);
             \Illuminate\Support\Facades\Log::error('Paiement.ajouterLigne failed', ['exception' => $e]);
 
             return response()->json([
@@ -253,6 +256,7 @@ class PaiementController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la modification du paiement',
@@ -293,6 +297,7 @@ class PaiementController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la suppression du paiement',

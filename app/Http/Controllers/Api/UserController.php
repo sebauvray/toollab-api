@@ -631,6 +631,7 @@ class UserController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            report($e);
             Log::error('User.searchStudents failed', ['exception' => $e, 'user_id' => auth()->id()]);
             return response()->json([
                 'status' => 'error',

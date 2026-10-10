@@ -171,6 +171,7 @@ class DirectorHandoverController extends Controller
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
+            report($e);
             Log::error('DirectorHandover.'.$action.' failed', [
                 'caller_id' => auth()->id(),
                 'school_id' => currentSchoolId(),

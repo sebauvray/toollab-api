@@ -150,6 +150,7 @@ class StudentClassroomController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             Log::error('StudentClassroom.enroll failed', [
                 'student_id' => $request->student_id,
                 'classroom_id' => $request->classroom_id,
@@ -219,6 +220,7 @@ class StudentClassroomController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la suppression',
@@ -302,6 +304,7 @@ class StudentClassroomController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue',

@@ -61,6 +61,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // Erreurs serveur conservées en base pour /admin/errors (le log fichier continue)
+        $exceptions->report(fn (Throwable $e) => \App\Support\ErrorRecorder::record($e));
+
         $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([

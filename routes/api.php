@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\CursusController;
 use App\Http\Controllers\Api\DirectorHandoverController;
+use App\Http\Controllers\Api\ErrorLogController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\FamilyDeletionController;
 use App\Http\Controllers\Api\FamilyImportController;
@@ -67,6 +68,10 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('/admin/users/{user}/disable', [UserAdminController::class, 'disable'])->whereNumber('user');
         Route::post('/admin/users/{user}/enable', [UserAdminController::class, 'enable'])->whereNumber('user');
         Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
+        Route::get('/admin/errors', [ErrorLogController::class, 'index']);
+        Route::get('/admin/errors/{id}', [ErrorLogController::class, 'show'])->whereNumber('id');
+        Route::post('/admin/errors/{id}/resolve', [ErrorLogController::class, 'resolve'])->whereNumber('id');
+        Route::post('/admin/errors/{id}/reopen', [ErrorLogController::class, 'reopen'])->whereNumber('id');
         Route::get('/admin/schools/{school}/features', [FeatureController::class, 'index'])->whereNumber('school');
         Route::post('/admin/schools/{school}/suspend', [SchoolAdminController::class, 'suspend'])->whereNumber('school');
         Route::post('/admin/schools/{school}/reactivate', [SchoolAdminController::class, 'reactivate'])->whereNumber('school');

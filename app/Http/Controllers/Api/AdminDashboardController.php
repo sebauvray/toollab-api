@@ -454,6 +454,7 @@ class AdminDashboardController extends Controller
                     : [],
             ],
             'mail' => config('mail.default'),
+            'errors' => ErrorLogController::summary(),
             'server_time' => now()->toIso8601String(),
         ];
     }

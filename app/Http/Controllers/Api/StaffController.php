@@ -360,6 +360,7 @@ class StaffController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'message' => 'Une erreur est survenue lors de la suppression du rôle',
                 'error' => 'Une erreur est survenue'

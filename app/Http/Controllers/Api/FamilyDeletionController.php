@@ -161,6 +161,7 @@ class FamilyDeletionController extends Controller
                     ->update(['deleted_at' => $now]);
             });
         } catch (\Throwable $e) {
+            report($e);
             Log::error('FamilyDeletion: destroy failed', [
                 'family_id' => $family->id,
                 'caller_id' => auth()->id(),
@@ -328,6 +329,7 @@ class FamilyDeletionController extends Controller
                 }
             });
         } catch (\Throwable $e) {
+            report($e);
             Log::error('FamilyDeletion: restore failed', [
                 'family_id' => $family->id,
                 'caller_id' => auth()->id(),

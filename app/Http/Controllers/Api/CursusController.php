@@ -85,6 +85,7 @@ class CursusController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
 
             return response()->json([
                 'status' => 'error',
@@ -137,6 +138,7 @@ class CursusController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
 
             return response()->json([
                 'status' => 'error',
@@ -172,6 +174,7 @@ class CursusController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
 
             return response()->json([
                 'status' => 'error',

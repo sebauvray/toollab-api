@@ -110,6 +110,7 @@ class SchoolYearController extends Controller
         } catch (\Illuminate\Http\Exceptions\HttpResponseException | \Symfony\Component\HttpKernel\Exception\HttpException $e) {
             throw $e;
         } catch (\Exception $e) {
+            report($e);
             Log::error('SchoolYear.store failed', ['exception' => $e]);
             return response()->json([
                 'status' => 'error',

@@ -452,6 +452,7 @@ class FamilyController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             \Illuminate\Support\Facades\Log::error('Family.store failed', ['exception' => $e]);
             return response()->json([
                 'status' => 'error',
@@ -668,6 +669,7 @@ class FamilyController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de l\'ajout des élèves',
@@ -707,6 +709,7 @@ class FamilyController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la mise à jour de l\'élève',
@@ -762,6 +765,7 @@ class FamilyController extends Controller
                     ->update(['deleted_at' => $now]);
             });
         } catch (\Throwable $e) {
+            report($e);
             Log::error('FamilyController.deleteStudent failed', [
                 'family_id' => $family->id,
                 'student_id' => $student->id,
@@ -854,6 +858,7 @@ class FamilyController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue',
@@ -955,6 +960,7 @@ class FamilyController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de l\'ajout du responsable',
@@ -1070,6 +1076,7 @@ class FamilyController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Une erreur est survenue lors de la mise à jour du responsable',

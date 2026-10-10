@@ -129,6 +129,7 @@ class SchoolController extends Controller
             return response()->json($school, 201);
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
 
             if (isset($logoPath)) {
                 Storage::disk('public')->delete($logoPath);

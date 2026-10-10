@@ -189,6 +189,7 @@ class ClassroomController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
 
             return response()->json([
                 'status' => 'error',
@@ -280,6 +281,7 @@ class ClassroomController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            report($e);
 
             return response()->json([
                 'status' => 'error',
@@ -302,6 +304,7 @@ class ClassroomController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la suppression de la classe',
@@ -339,6 +342,7 @@ class ClassroomController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de l\'ajout de l\'élève',
@@ -360,6 +364,7 @@ class ClassroomController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors du retrait de l\'élève',
@@ -486,6 +491,7 @@ class ClassroomController extends Controller
                 'message' => 'L\'élève a été retiré de la classe avec succès'
             ]);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la suppression de l\'élève de la classe'
