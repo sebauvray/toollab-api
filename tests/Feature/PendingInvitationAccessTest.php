@@ -181,3 +181,31 @@ it('ne fait pas d\'un invité qui refuse un ancien staff', function () {
     app('auth')->forgetGuards();
     $this->postJson('/api/login', ['email' => $this->invited->email, 'password' => 'password'])->assertForbidden();
 });
+
+it("n'envoie le lien « mot de passe oublié » qu'aux comptes autorisés à se connecter", function () {
+    \Illuminate\Support\Facades\Notification::fake();
+
+    $staff = pendingUser('Staff');
+    pendingAttach($staff, 'teacher', 'school', $this->school->id, true);
+    $desactive = pendingUser('Desactive');
+    pendingAttach($desactive, 'teacher', 'school', $this->school->id, true);
+    $desactive->forceFill(['access' => false])->save();
+
+    $message = $this->postJson('/api/forgot-password', ['email' => $staff->email])->assertOk()->json('message');
+
+    // Parent seul, compte désactivé, e-mail inconnu : même réponse, aucun envoi
+    foreach ([$this->otherParent->email, $desactive->email, 'inconnu@pending-test.com'] as $email) {
+        expect($this->postJson('/api/forgot-password', ['email' => $email])->assertOk()->json('message'))->toBe($message);
+    }
+
+    \Illuminate\Support\Facades\Notification::assertSentTo($staff, \App\Notifications\CustomResetPasswordNotification::class);
+    \Illuminate\Support\Facades\Notification::assertNotSentTo([$this->otherParent, $desactive], \App\Notifications\CustomResetPasswordNotification::class);
+});
+
+it('envoie le lien à un invité staff (il doit pouvoir activer son compte)', function () {
+    \Illuminate\Support\Facades\Notification::fake();
+
+    $this->postJson('/api/forgot-password', ['email' => $this->invited->email])->assertOk();
+
+    \Illuminate\Support\Facades\Notification::assertSentTo($this->invited, \App\Notifications\CustomResetPasswordNotification::class);
+});

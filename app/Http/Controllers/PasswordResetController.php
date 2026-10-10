@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,13 @@ class PasswordResetController extends Controller
     {
         $request->validate(['email' => 'required|email']);
 
-        Password::sendResetLink($request->only('email'));
+        // Pas de lien pour un compte qui ne peut pas se connecter (familles, comptes
+        // désactivés) : il définirait un mot de passe inutilisable. Réponse identique
+        // dans tous les cas, pour ne pas révéler quels e-mails existent.
+        $user = User::where('email', $request->email)->first();
+        if ($user && $user->access && $user->canLogIn()) {
+            Password::sendResetLink($request->only('email'));
+        }
 
         return response()->json(['message' => 'Si un compte existe pour cette adresse, un lien de réinitialisation du mot de passe lui a été envoyé.']);
     }
