@@ -310,8 +310,24 @@ class UserController extends Controller
                 'message' => "Ce compte est directeur d'une école : transférez d'abord la direction (passation de direction) avant de le supprimer.",
             ], 422);
         }
-        Audit::log('user.deleted', currentSchoolId(), $user);
-        $user->delete();
+        // Le compte peut appartenir à d'autres écoles : on ne le retire que de l'école courante
+        $schoolId = currentSchoolId();
+        if (!$schoolId) {
+            return response()->json(['message' => 'Aucune école sélectionnée.'], 422);
+        }
+        if ($user->id === auth()->id()) {
+            return response()->json(['message' => 'Vous ne pouvez pas vous retirer vous-même.'], 422);
+        }
+        $roles = UserRole::query()
+            ->where('user_id', $user->id)
+            ->where('roleable_type', 'school')
+            ->where('roleable_id', $schoolId);
+        $slugs = (clone $roles)->with('role:id,slug')->get()->pluck('role.slug')->filter()->unique()->values()->all();
+        if (empty($slugs)) {
+            return response()->json(['message' => 'Cet utilisateur n\'appartient pas à cette école.'], 404);
+        }
+        $roles->forceDelete();
+        Audit::log('user.removed_from_school', $schoolId, $user, ['roles' => $slugs]);
         return response()->json(null, 204);
     }
 
