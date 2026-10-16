@@ -23,6 +23,9 @@ use Laravel\Sanctum\PersonalAccessToken;
 class Audit
 {
     public const ACTIONS = [
+        'user.email_change_requested' => 'Changement d’email demandé',
+        'user.email_recovery_requested' => 'Récupération d’email par le support',
+        'user.email_changed' => 'Adresse de connexion modifiée',
         'school.created' => 'École créée',
         'school.updated' => 'École modifiée',
         'school.deleted' => 'École supprimée',

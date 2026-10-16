@@ -45,9 +45,8 @@ class RoleController extends Controller
 
         return response()->json([
             'roles' => $roles,
-            'permissions' => collect(PermissionCatalog::PERMISSIONS)
-                ->map(fn ($meta, $key) => ['key' => $key] + $meta)
-                ->values(),
+            // Blocs du menu, chacun avec ses niveaux « voir » et « modifier »
+            'modules' => PermissionCatalog::modulesForApi(),
         ]);
     }
 
@@ -55,6 +54,8 @@ class RoleController extends Controller
     {
         $schoolId = (int) currentSchoolId();
         $validated = $this->validateRole($request, $schoolId);
+        $validated['permissions'] = PermissionCatalog::normalize($validated['permissions']);
+        $this->ensureGrantable($validated['permissions'], $schoolId);
 
         $role = DB::transaction(function () use ($validated, $schoolId) {
             $role = Role::create([
@@ -79,6 +80,8 @@ class RoleController extends Controller
         if ($deny = $this->denyIfNotEditable($role, $schoolId)) return $deny;
 
         $validated = $this->validateRole($request, $schoolId, $role);
+        $validated['permissions'] = PermissionCatalog::normalize($validated['permissions']);
+        $this->ensureGrantable($validated['permissions'], $schoolId);
         $before = $role->permissions()->pluck('key')->all();
 
         DB::transaction(function () use ($role, $validated) {
@@ -130,7 +133,7 @@ class RoleController extends Controller
             ],
             'description' => 'nullable|string|max:255',
             'permissions' => 'present|array',
-            'permissions.*' => ['string', 'distinct', Rule::in(array_keys(PermissionCatalog::PERMISSIONS))],
+            'permissions.*' => ['string', 'distinct', Rule::in(PermissionCatalog::assignable())],
         ], [
             'name.unique' => 'Un rôle porte déjà ce nom dans votre établissement.',
         ]);
@@ -146,7 +149,33 @@ class RoleController extends Controller
             return response()->json(['message' => 'Ce rôle est verrouillé et ne peut pas être modifié.'], 403);
         }
 
+        if (!$this->canEditRole($role, $schoolId)) {
+            return response()->json(['message' => 'Vous ne pouvez pas modifier ce rôle.'], 403);
+        }
         return null;
+    }
+
+    private function canEditRole(Role $role, int $schoolId): bool
+    {
+        $caller = auth()->user();
+        if ($role->is_locked) return false;
+        if ($caller->is_super_admin || $caller->hasPermissionIn($schoolId, PermissionCatalog::SCHOOL_MANAGE)) return true;
+        if (!$caller->hasPermissionIn($schoolId, 'roles.manage')) return false;
+        if ($caller->roles()->where('role_id', $role->id)->where('roleable_id', $schoolId)
+            ->whereIn('roleable_type', ['school', School::class])->exists()) return false;
+        return StaffRolePermissions::canAssign(
+            $caller->permissionKeysIn($schoolId),
+            $role->permissions()->pluck('key')->all(), false
+        );
+    }
+
+    private function ensureGrantable(array $keys, int $schoolId): void
+    {
+        $caller = auth()->user();
+        if ($caller->is_super_admin || $caller->hasPermissionIn($schoolId, PermissionCatalog::SCHOOL_MANAGE)) return;
+        abort_unless(StaffRolePermissions::canAssign(
+            $caller->permissionKeysIn($schoolId), $keys, false
+        ), 403, 'Vous ne pouvez pas accorder ces permissions.');
     }
 
     private function syncPermissions(Role $role, array $keys): void
@@ -188,6 +217,7 @@ class RoleController extends Controller
             'slug' => $role->slug,
             'description' => $role->description,
             'is_locked' => $role->is_locked,
+            'editable' => $this->canEditRole($role, $schoolId),
             'is_default' => in_array($role->slug, PermissionCatalog::STAFF_SLUGS, true),
             'permissions' => $keys,
             'users_count' => $usersCount,

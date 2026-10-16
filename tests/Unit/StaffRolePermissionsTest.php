@@ -36,7 +36,7 @@ test('a registration manager cannot manage staff roles', function () {
 });
 
 test('a custom role cannot grant rights its holder does not have', function () {
-    $caller = ['staff.manage', 'families.view', 'families.edit'];
+    $caller = ['staff.roles', 'families.view', 'families.create'];
 
     expect(StaffRolePermissions::canAssign($caller, ['families.view'], false))->toBeTrue()
         ->and(StaffRolePermissions::canAssign($caller, ['families.view', 'statistics.view'], false))->toBeFalse()

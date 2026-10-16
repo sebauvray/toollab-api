@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Support\Audit;
+use App\Support\StaffRolePermissions;
 use App\Models\Classroom;
 use App\Models\Role;
 use App\Models\Scopes\BelongsToSchoolYearScope;
@@ -78,9 +79,9 @@ class UserController extends Controller
         return response()->json(['message' => 'Accès refusé'], 403);
     }
 
-    private function callerCan(int $schoolId, string $permission): bool
+    private function callerCan(int $schoolId, string ...$permissions): bool
     {
-        return auth()->user()->hasPermissionIn($schoolId, $permission);
+        return auth()->user()->hasPermissionIn($schoolId, ...$permissions);
     }
 
     /**
@@ -99,7 +100,7 @@ class UserController extends Controller
         if ($schoolId === null) return false;
         if (!$this->userBelongsToSchool($target->id, $schoolId)) return false;
 
-        if ($this->callerCan($schoolId, 'families.edit')) {
+        if ($this->callerCan($schoolId, 'families.update')) {
             return true;
         }
 
@@ -273,10 +274,11 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user)
     {
-        if (!$this->canManageUser($user, 'staff.manage')) {
+        if (!StaffRolePermissions::canUpdateMember($request->user(), $user, (int) currentSchoolId())) {
             return $this->denyAccess('user.update', ['target_id' => $user->id]);
         }
 
+        \App\Support\AccountEmail::validateChange($user, $request->validated('email'));
         $user->update($request->validated());
 
         return $user;
@@ -292,7 +294,7 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
-        if (!$this->canManageUser($user, 'staff.manage')) {
+        if (!$this->canManageUser($user, 'staff.remove')) {
             return $this->denyAccess('user.destroy', ['target_id' => $user->id]);
         }
         if ($user->is_super_admin) {
@@ -315,6 +317,9 @@ class UserController extends Controller
         if (!$schoolId) {
             return response()->json(['message' => 'Aucune école sélectionnée.'], 422);
         }
+        if (!$this->callerCan($schoolId, 'staff.remove')) {
+            return $this->denyAccess('user.destroy.current_school', ['target_id' => $user->id]);
+        }
         if ($user->id === auth()->id()) {
             return response()->json(['message' => 'Vous ne pouvez pas vous retirer vous-même.'], 422);
         }
@@ -325,6 +330,11 @@ class UserController extends Controller
         $slugs = (clone $roles)->with('role:id,slug')->get()->pluck('role.slug')->filter()->unique()->values()->all();
         if (empty($slugs)) {
             return response()->json(['message' => 'Cet utilisateur n\'appartient pas à cette école.'], 404);
+        }
+        foreach ($slugs as $slug) {
+            if (!StaffRolePermissions::canManage(auth()->user(), $schoolId, $slug)) {
+                return $this->denyAccess('user.destroy.role', ['target_id' => $user->id]);
+            }
         }
         $roles->forceDelete();
         Audit::log('user.removed_from_school', $schoolId, $user, ['roles' => $slugs]);
@@ -423,89 +433,6 @@ class UserController extends Controller
         ];
     }
 
-    /**
-     * Get users by context type and role
-     */
-    public function getUsersByContextAndRole(Request $request)
-    {
-        $request->validate([
-            'context_type' => 'required|in:school,family,classroom',
-            'context_id' => 'required|integer|min:1',
-            'role_name' => 'required|string|max:100',
-        ]);
-
-        $schoolId = currentSchoolId();
-        if ($schoolId === null) {
-            return $this->denyAccess('user.by_context.no_school');
-        }
-
-        $type = $request->context_type;
-        $contextId = (int) $request->context_id;
-
-        $allowed = match ($type) {
-            'school' => $contextId === $schoolId,
-            'family' => Family::query()->withoutGlobalScopes()
-                ->whereKey($contextId)->where('school_id', $schoolId)->exists(),
-            'classroom' => Classroom::query()->withoutGlobalScopes()
-                ->whereKey($contextId)->where('school_id', $schoolId)->exists(),
-        };
-
-        if (!$allowed && !auth()->user()->is_super_admin) {
-            return $this->denyAccess('user.by_context', [
-                'requested_type' => $type,
-                'requested_id' => $contextId,
-                'current_school_id' => $schoolId,
-            ]);
-        }
-
-        return User::whereHas('roles', function ($query) use ($request) {
-            $query->whereHas('role', function ($q) use ($request) {
-                $q->where('name', $request->role_name);
-            })
-            ->where('roleable_type', $request->context_type)
-            ->where('roleable_id', $request->context_id);
-        })->get();
-    }
-
-    /**
-     * Get users of a specific class
-     */
-    public function getClassroomUsers(Classroom $classroom): JsonResponse
-    {
-        if ($classroom->school_id !== currentSchoolId()) {
-            return $this->denyAccess('user.classroom_users.cross_tenant', ['classroom_id' => $classroom->id]);
-        }
-        $caller = auth()->user();
-        if (!$caller->is_super_admin && !$this->callerCan($classroom->school_id, 'staff.view')) {
-            return $this->denyAccess('user.classroom_users.no_role', ['classroom_id' => $classroom->id]);
-        }
-
-        $users = $classroom->userRoles()
-            ->with(['user', 'role'])
-            ->get()
-            ->map(function ($userRole) {
-                return [
-                    'user' => [
-                        'id' => $userRole->user->id,
-                        'name' => $userRole->user->name,
-                        'email' => $userRole->user->email,
-                    ],
-                    'role' => [
-                        'id' => $userRole->role->id,
-                        'name' => $userRole->role->name
-                    ]
-                ];
-            });
-
-        return [
-            'classroom' => [
-                'id' => $classroom->id,
-                'name' => $classroom->name,
-            ],
-            'users' => $users
-        ];
-    }
-
     public function getSchoolUsers(School $school)
     {
         if ($school->id !== currentSchoolId()) {
@@ -555,7 +482,8 @@ class UserController extends Controller
         }
 
         $caller = auth()->user();
-        if (!$caller->is_super_admin && !$this->callerCan($schoolId, 'staff.view')) {
+        // Choix du professeur d'une classe : aussi ouvert à qui voit les classes
+        if (!$caller->is_super_admin && !$this->callerCan($schoolId, 'staff.view', 'classrooms.view')) {
             return $this->denyAccess('user.list_teachers.no_role', ['school_id' => $schoolId]);
         }
 
@@ -569,6 +497,10 @@ class UserController extends Controller
             ->orderBy('users.last_name')
             ->orderBy('users.first_name')
             ->get();
+
+        $teachers->each(function (User $teacher) use ($caller, $schoolId) {
+            $teacher->setAttribute('can_update', StaffRolePermissions::canUpdateMember($caller, $teacher, (int) $schoolId));
+        });
 
         return response()->json([
             'status' => 'success',

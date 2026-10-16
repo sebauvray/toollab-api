@@ -87,6 +87,11 @@ class StudentClassroomController extends Controller
                 ->first();
 
             if ($existingTypeEnrollment) {
+                // Changer de classe retire l'inscription précédente : les deux droits sont requis.
+                if (!$request->user()->hasPermissionIn((int) currentSchoolId(), 'enrollments.delete')) {
+                    DB::rollBack();
+                    return response()->json(['status' => 'error', 'message' => 'Vous ne pouvez pas désinscrire cet élève de sa classe actuelle.'], 403);
+                }
                 $existingTypeEnrollment->delete();
 
                 UserRole::where('user_id', $request->student_id)

@@ -50,7 +50,8 @@ it('liste les rôles de l\'école avec le catalogue de permissions', function ()
         ->and($response->json('roles.0.is_locked'))->toBeTrue()
         ->and($response->json('roles.0.assignable'))->toBeFalse()
         ->and($response->json('roles.0.users_count'))->toBe(1)
-        ->and(collect($response->json('permissions'))->pluck('key'))->toContain('roles.manage');
+        ->and(collect($response->json('modules'))->pluck('key')->all())
+            ->toBe(['school', 'school_years', 'roles', 'families', 'payments', 'cursus', 'classrooms', 'staff', 'tarification', 'statistics', 'teaching']);
 });
 
 it('crée un rôle personnalisé qui donne réellement ses droits une fois attribué', function () {
@@ -135,11 +136,11 @@ it('ne touche pas aux rôles d\'une autre école', function () {
     ])->assertNotFound();
 });
 
-it('réserve la gestion des rôles à roles.manage', function () {
+it('ouvre la gestion des rôles au directeur et à l’administrateur', function () {
     $admin = roleMgmtMember($this->school, 'admin');
 
     roleMgmtCall($admin, $this->school, 'GET', '/api/roles')->assertOk();
-    roleMgmtCall($admin, $this->school, 'POST', '/api/roles', ['name' => 'X', 'permissions' => []])->assertForbidden();
+    roleMgmtCall($admin, $this->school, 'POST', '/api/roles', ['name' => 'X', 'permissions' => []])->assertCreated();
     roleMgmtCall(roleMgmtMember($this->school, 'registar'), $this->school, 'GET', '/api/roles')->assertForbidden();
 });
 
@@ -160,4 +161,26 @@ it('refuse un nom en double et une permission inconnue', function () {
         ->assertStatus(422)->assertJsonValidationErrors('name');
     roleMgmtCall($this->director, $this->school, 'POST', '/api/roles', ['name' => 'Y', 'permissions' => ['tout.faire']])
         ->assertStatus(422)->assertJsonValidationErrors('permissions.0');
+});
+
+
+it('un admin modifie un rôle inférieur mais pas le sien ni le directeur', function () {
+    $admin = roleMgmtMember($this->school, 'admin');
+    foreach (['admin', 'director'] as $slug) {
+        roleMgmtCall($admin, $this->school, 'PUT', '/api/roles/'.Role::staffFor($this->school->id, $slug)->id,
+            ['name' => 'Changé', 'permissions' => ['families.view']])->assertForbidden();
+    }
+    roleMgmtCall($admin, $this->school, 'PUT', '/api/roles/'.Role::staffFor($this->school->id, 'registar')->id,
+        ['name' => 'Accueil', 'permissions' => ['families.view']])->assertOk();
+    roleMgmtCall($admin, $this->school, 'POST', '/api/roles',
+        ['name' => 'Copie admin', 'permissions' => App\Support\PermissionCatalog::defaultsFor('admin')])->assertForbidden();
+});
+
+
+it('un gestionnaire de rôles ne peut pas accorder une permission qu’il ne possède pas', function () {
+    $role = Role::create(['school_id' => $this->school->id, 'name' => 'Gestionnaire', 'slug' => 'gestionnaire']);
+    $role->permissions()->sync(App\Models\Permission::whereIn('key', ['roles.manage', 'families.view'])->pluck('id'));
+    $user = roleMgmtMember($this->school, 'gestionnaire');
+    roleMgmtCall($user, $this->school, 'POST', '/api/roles', ['name' => 'Accueil', 'permissions' => ['families.view']])->assertCreated();
+    roleMgmtCall($user, $this->school, 'POST', '/api/roles', ['name' => 'Interdit', 'permissions' => ['staff.roles']])->assertForbidden();
 });

@@ -28,6 +28,11 @@ class StaffController extends Controller
         return StaffRolePermissions::canManage($caller, $schoolId, $roleSlug);
     }
 
+    private function callerHas(int $schoolId, string $permission): bool
+    {
+        return (bool) auth()->user()?->hasPermissionIn($schoolId, $permission);
+    }
+
     // Le soft delete de user_roles ne concerne que les liens famille/classe ; un reliquat
     // supprimé ferait échouer la contrainte unique_user_role_context à la ré-attribution.
     private function purgeTrashedSchoolRole(int $userId, string $roleSlug, int $schoolId): void
@@ -112,6 +117,13 @@ class StaffController extends Controller
         }
 
         $existingUser = User::where('email', $request->email)->first();
+
+        // Membre déjà rattaché : on lui attribue des rôles (staff.roles) ;
+        // sinon c'est une invitation (staff.invite).
+        $alreadyMember = $existingUser && $school->userRoles()->where('user_id', $existingUser->id)->exists();
+        if (!$this->callerHas($school->id, $alreadyMember ? 'staff.roles' : 'staff.invite')) {
+            return response()->json(['message' => 'Vous n\'avez pas les droits nécessaires pour effectuer cette action'], 403);
+        }
 
         // Une adhésion à l'école n'est "acceptée" (et le nom visible par l'école) que
         // lorsque l'utilisateur a activé son compte ou accepté l'invitation via connexion.
@@ -239,6 +251,7 @@ class StaffController extends Controller
 
         if (!$caller
             || currentSchoolId() !== $schoolId
+            || !$this->callerHas($schoolId, 'staff.roles')
             || !$this->canManageRole($caller, $schoolId, $roleSlug)
         ) {
             return response()->json(['message' => 'Accès refusé'], 403);
@@ -309,6 +322,7 @@ class StaffController extends Controller
 
         if (!$caller
             || currentSchoolId() !== $schoolId
+            || !$this->callerHas($schoolId, 'staff.roles')
             || !$this->canManageRole($caller, $schoolId, $roleSlug)
         ) {
             \Illuminate\Support\Facades\Log::warning('StaffController.removeUserRole: forbidden', [
@@ -379,7 +393,7 @@ class StaffController extends Controller
         $schoolId = (int) $validated['school_id'];
         $targetUserId = (int) $validated['user_id'];
 
-        if (!$caller || currentSchoolId() !== $schoolId) {
+        if (!$caller || currentSchoolId() !== $schoolId || !$this->callerHas($schoolId, 'staff.remove')) {
             return response()->json(['message' => 'Accès refusé'], 403);
         }
 

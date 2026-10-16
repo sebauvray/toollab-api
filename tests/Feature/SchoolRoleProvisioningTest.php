@@ -32,7 +32,7 @@ it('donne à une nouvelle école ses propres rôles staff avec les droits actuel
     expect($roles->keys()->sort()->values()->all())->toBe(collect(PermissionCatalog::STAFF_SLUGS)->sort()->values()->all())
         ->and($roles['director']->is_locked)->toBeTrue()
         ->and($roles['admin']->is_locked)->toBeFalse()
-        ->and(Permission::count())->toBe(count(PermissionCatalog::PERMISSIONS));
+        ->and(Permission::count())->toBe(count(PermissionCatalog::definitions()));
 
     foreach (PermissionCatalog::STAFF_SLUGS as $slug) {
         expect(provisionedPermissionKeys($roles[$slug]))
@@ -130,7 +130,7 @@ it('renvoie les permissions de chaque rôle école au front', function () {
         ->json('roles.schools'))
         ->keyBy('role_slug');
 
-    expect($schools['teacher']['permissions'])->toBe(['teaching.access'])
+    expect($schools['teacher']['permissions'])->toEqualCanonicalizing(['teaching.access', 'teaching.attendance', 'teaching.outcomes'])
         ->and($schools['admin']['permissions'])->toContain('statistics.view')
         ->and($schools['admin']['permissions'])->not->toContain('teaching.access');
 });

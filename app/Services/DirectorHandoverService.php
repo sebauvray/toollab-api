@@ -319,13 +319,13 @@ class DirectorHandoverService
         $this->revokeSchoolRoles($user->id, $schoolId, ['admin', 'registar']);
     }
 
+    // La passation conserve les rôles personnalisés de l'ancien directeur.
     private function demote(User $user, int $schoolId, string $outgoingRole, bool $removeTeacherRole): void
     {
         $revoked = array_diff(['director', 'admin', 'registar'], [$outgoingRole]);
         if ($removeTeacherRole) {
             $revoked[] = 'teacher';
         }
-
         $this->revokeSchoolRoles($user->id, $schoolId, array_values($revoked));
 
         if ($outgoingRole !== 'none') {

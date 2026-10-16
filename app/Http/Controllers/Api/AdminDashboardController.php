@@ -277,6 +277,8 @@ class AdminDashboardController extends Controller
             'access' => (bool) $u->access,
             'is_super_admin' => $isSuperAdmin,
             'is_staff' => $isStaff,
+            'can_recover_email' => !$isSuperAdmin && (bool) $u->access
+                && ($u->became_staff_at !== null || $memberships->contains(fn ($m) => $m->scope === 'school')),
             'is_former_staff' => ! $isStaff && ! $isSuperAdmin && $u->became_staff_at !== null
                 && $memberships->doesntContain(fn ($m) => $m->scope === 'school'),
             'can_impersonate' => $isStaff && ! $isSuperAdmin && $u->access,

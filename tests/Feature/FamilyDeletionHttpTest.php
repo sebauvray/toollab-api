@@ -99,7 +99,15 @@ beforeEach(function () {
 
     $this->admin = httpStaff('admin', $this->school);
     $this->director = httpStaff('director', $this->school);
-    $this->registar = httpStaff('registar', $this->school);
+
+    // Consulte les familles sans pouvoir les gérer : la suppression lui est fermée
+    $readerRole = \App\Models\Role::create(['school_id' => $this->school->id, 'name' => 'Lecture familles', 'slug' => 'lecture-familles']);
+    $readerRole->permissions()->sync(\App\Models\Permission::where('key', 'families.view')->pluck('id'));
+    $this->reader = \App\Models\User::factory()->create(['access' => true]);
+    \App\Models\UserRole::create([
+        'user_id' => $this->reader->id, 'role_id' => $readerRole->id, 'roleable_type' => 'school',
+        'roleable_id' => $this->school->id, 'accepted_at' => now(),
+    ]);
 
     $cursus = Cursus::create(['name' => 'Coran', 'progression' => 'continu']);
     Tarif::create(['cursus_id' => $cursus->id, 'prix' => 200, 'actif' => true]);
@@ -249,8 +257,8 @@ it('autorise un directeur', function () {
     expect(famillesEnBase())->toBe(0);
 });
 
-it('refuse un responsable des inscriptions', function () {
-    $this->actingAs($this->registar, 'sanctum')
+it('refuse un rôle qui consulte les familles sans les gérer', function () {
+    $this->actingAs($this->reader, 'sanctum')
         ->deleteJson("/api/families/{$this->family->id}", [], $this->headers)
         ->assertStatus(403);
 
@@ -268,7 +276,7 @@ it('refuse un professeur', function () {
 });
 
 it('refuse la prévisualisation à un rôle non autorisé', function () {
-    $this->actingAs($this->registar, 'sanctum')
+    $this->actingAs($this->reader, 'sanctum')
         ->getJson("/api/families/{$this->family->id}/deletion-preview", $this->headers)
         ->assertStatus(403);
 });
@@ -279,7 +287,7 @@ it('refuse la restauration à un rôle non autorisé', function () {
     $this->actingAs($this->admin, 'sanctum')
         ->deleteJson("/api/families/{$this->family->id}", [], $this->headers);
 
-    $this->actingAs($this->registar, 'sanctum')
+    $this->actingAs($this->reader, 'sanctum')
         ->postJson("/api/families/{$this->family->id}/restore", [], $this->headers)
         ->assertStatus(403);
 
@@ -536,7 +544,7 @@ it('refuse la suppression définitive à un rôle non autorisé', function () {
     $this->actingAs($this->admin, 'sanctum')
         ->deleteJson("/api/families/{$this->family->id}", [], $this->headers)->assertStatus(200);
 
-    $this->actingAs($this->registar, 'sanctum')
+    $this->actingAs($this->reader, 'sanctum')
         ->postJson("/api/families/{$this->family->id}/purge", [], $this->headers)
         ->assertStatus(403);
 });
