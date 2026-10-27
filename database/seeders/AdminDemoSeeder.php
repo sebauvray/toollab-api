@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * Données de démonstration pour l'administration plateforme : trois écoles aux
+ * Données de démonstration pour l'administration plateforme : dix écoles aux
  * profils de santé différents et 30 jours d'historique de connexions.
  * Local uniquement : php artisan db:seed --class=AdminDemoSeeder
  */
@@ -29,23 +29,39 @@ class AdminDemoSeeder extends Seeder
         $this->password = Hash::make('password');
         $this->roles = DB::table('roles')->pluck('id', 'slug')->all();
 
-        // Saine : équipe complète, activité quotidienne
-        $this->school('Institut An-Nour', 'Lyon', createdDaysAgo: 120, lastActivityDaysAgo: 0,
-            director: true, teachers: 4, classes: 6, students: 90);
+        // Saines : équipe complète, activité récente
+        $this->school('École Ar-Rahma', 'Paris', createdDaysAgo: 300, lastActivityDaysAgo: 0,
+            director: true, teachers: 6, classes: 8, students: 140);
+        $this->school('Institut Al-Ihsan', 'Toulouse', createdDaysAgo: 180, lastActivityDaysAgo: 1,
+            director: true, teachers: 3, classes: 4, students: 60);
+        $this->school('Centre As-Salam', 'Nantes', createdDaysAgo: 90, lastActivityDaysAgo: 3,
+            director: true, teachers: 2, classes: 2, students: 28);
+        $this->school('Institut Ibn Sina', 'Bordeaux', createdDaysAgo: 250, lastActivityDaysAgo: 0,
+            director: true, teachers: 5, classes: 7, students: 110);
+        $this->school('École Dar Al-Ilm', 'Montpellier', createdDaysAgo: 60, lastActivityDaysAgo: 0,
+            director: true, teachers: 4, classes: 5, students: 72);
 
-        // Inactive : plus aucune connexion depuis 25 jours
-        $this->school('École Al-Furqan', 'Marseille', createdDaysAgo: 200, lastActivityDaysAgo: 25,
-            director: true, teachers: 2, classes: 3, students: 35);
+        // Inactive : plus aucune connexion depuis 40 jours
+        $this->school('École Al-Hikma', 'Strasbourg', createdDaysAgo: 400, lastActivityDaysAgo: 40,
+            director: true, teachers: 3, classes: 3, students: 45);
 
-        // En onboarding : récente, sans directeur ni classe, une invitation en attente
-        $this->school('Centre Ibn Khaldoun', 'Lille', createdDaysAgo: 5, lastActivityDaysAgo: 1,
+        // En onboarding : récentes, sans directeur, une invitation en attente
+        $this->school('École Al-Amal', 'Nice', createdDaysAgo: 15, lastActivityDaysAgo: 2,
+            director: false, teachers: 1, classes: 1, students: 8, pendingInvite: true);
+        $this->school('École An-Najah', 'Saint-Denis', createdDaysAgo: 3, lastActivityDaysAgo: 0,
             director: false, teachers: 0, classes: 0, students: 0, pendingInvite: true);
+
+        // Suspendues
+        $this->school('Centre Al-Bayan', 'Rennes', createdDaysAgo: 150, lastActivityDaysAgo: 12,
+            director: true, teachers: 2, classes: 3, students: 30, suspended: true);
+        $this->school('Institut Al-Kawthar', 'Grenoble', createdDaysAgo: 220, lastActivityDaysAgo: 60,
+            director: true, teachers: 1, classes: 2, students: 18, suspended: true);
 
         $this->loginHistory();
     }
 
     private function school(string $name, string $city, int $createdDaysAgo, int $lastActivityDaysAgo,
-        bool $director, int $teachers, int $classes, int $students, bool $pendingInvite = false): void
+        bool $director, int $teachers, int $classes, int $students, bool $pendingInvite = false, bool $suspended = false): void
     {
         if (DB::table('schools')->where('name', $name)->exists()) {
             return;
@@ -55,7 +71,7 @@ class AdminDemoSeeder extends Seeder
         $slug = Str::slug($name);
         $schoolId = DB::table('schools')->insertGetId([
             'name' => $name, 'city' => $city, 'country' => 'France', 'address' => '1 rue de la Paix',
-            'email' => "contact@{$slug}.test", 'access' => true, 'created_at' => $created, 'updated_at' => $created,
+            'email' => "contact@{$slug}.test", 'access' => ! $suspended, 'created_at' => $created, 'updated_at' => $created,
         ]);
         $yearId = DB::table('school_years')->insertGetId([
             'school_id' => $schoolId, 'label' => '2026-2027', 'is_active' => true, 'outcomes_open' => false,
@@ -87,8 +103,10 @@ class AdminDemoSeeder extends Seeder
 
         for ($i = 1; $i <= $students; $i++) {
             $familyId = DB::table('families')->insertGetId(['school_id' => $schoolId, 'created_at' => $created, 'updated_at' => $created]);
+            $lastName = fake('fr_FR')->lastName();
+            $this->responsibles($familyId, $lastName, $created);
             $studentId = DB::table('users')->insertGetId([
-                'first_name' => fake('fr_FR')->firstName(), 'last_name' => fake('fr_FR')->lastName(),
+                'first_name' => fake('fr_FR')->firstName(), 'last_name' => $lastName,
                 'email' => "eleve{$i}.student.".uniqid()."@school.com", 'password' => '',
                 'access' => true, 'created_at' => $created, 'updated_at' => $created,
             ]);
@@ -101,6 +119,32 @@ class AdminDemoSeeder extends Seeder
                 'family_id' => $familyId, 'school_year_id' => $yearId, 'status' => 'active',
                 'enrollment_date' => $created, 'created_at' => $created, 'updated_at' => $created,
             ]);
+        }
+    }
+
+    /** Un ou deux responsables par famille, au nom de l'élève, coordonnées comprises. */
+    private function responsibles(int $familyId, string $lastName, Carbon $since): void
+    {
+        $count = rand(1, 100) <= 60 ? 2 : 1;
+        for ($i = 0; $i < $count; $i++) {
+            $firstName = fake('fr_FR')->firstName();
+            $userId = DB::table('users')->insertGetId([
+                'first_name' => $firstName, 'last_name' => $lastName,
+                'email' => Str::slug($firstName).'.'.Str::slug($lastName).'.'.uniqid().'@famille.test',
+                'password' => '', 'access' => true, 'created_at' => $since, 'updated_at' => $since,
+            ]);
+            DB::table('user_roles')->insert([
+                'user_id' => $userId, 'role_id' => $this->roles['responsible'], 'roleable_type' => 'family',
+                'roleable_id' => $familyId, 'created_at' => $since, 'updated_at' => $since,
+            ]);
+            $infos = [
+                'phone' => fake('fr_FR')->mobileNumber(), 'address' => fake('fr_FR')->streetAddress(),
+                'city' => fake('fr_FR')->city(), 'zipcode' => fake('fr_FR')->postcode(),
+                'gender' => $i === 0 ? 'F' : 'M',
+            ];
+            DB::table('user_infos')->insert(array_map(fn ($key, $value) => [
+                'user_id' => $userId, 'key' => $key, 'value' => $value, 'created_at' => $since, 'updated_at' => $since,
+            ], array_keys($infos), $infos));
         }
     }
 
