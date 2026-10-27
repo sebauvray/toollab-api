@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Donne à une école ses propres rôles staff, copiés des modèles globaux, puis
  * raccroche dessus les rattachements de l'école qui pointent encore sur un
- * modèle. Idempotent : n'écrase jamais les permissions d'un rôle déjà copié,
- * l'école a pu les modifier.
+ * modèle. Idempotent : n'écrase jamais les permissions d'un rôle déjà copié
+ * (l'école a pu les modifier), sauf les rôles verrouillés.
  */
 class SchoolRoleProvisioner
 {
@@ -20,17 +20,28 @@ class SchoolRoleProvisioner
     /**
      * Aligne le catalogue en base sur le code, ainsi que les droits des modèles
      * globaux : un rattachement resté sur un modèle garde ses droits par défaut.
+     * Les rôles verrouillés (Directeur) suivent toujours le catalogue : personne
+     * dans l'école ne peut les modifier, ils recevraient sinon jamais une
+     * permission ajoutée plus tard.
      */
     public function syncPermissions(): void
     {
-        foreach (PermissionCatalog::PERMISSIONS as $key => $meta) {
+        $definitions = PermissionCatalog::definitions();
+        foreach ($definitions as $key => $meta) {
             Permission::updateOrCreate(['key' => $key], $meta);
         }
+        Permission::whereNotIn('key', array_keys($definitions))->delete();
 
         $permissionIds = Permission::pluck('id', 'key');
         foreach (Role::global()->whereIn('slug', PermissionCatalog::STAFF_SLUGS)->get() as $template) {
             $template->permissions()->sync(
                 $permissionIds->only(PermissionCatalog::defaultsFor($template->slug))->values()
+            );
+        }
+
+        foreach (Role::whereNotNull('school_id')->whereIn('slug', PermissionCatalog::LOCKED_SLUGS)->get() as $locked) {
+            $locked->permissions()->sync(
+                $permissionIds->only(PermissionCatalog::defaultsFor($locked->slug))->values()
             );
         }
     }

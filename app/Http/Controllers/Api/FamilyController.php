@@ -40,7 +40,7 @@ class FamilyController extends Controller
      * Le caller (auth user) a-t-il le droit d'accéder à $family ?
      * - super-admin : oui
      * - staff de l'école ayant $permission (families.view en lecture,
-     *   families.edit en écriture) : oui
+     *   families.update en écriture) : oui
      * - rattaché à la famille (responsible ou student) : oui
      * - sinon : non (renvoyer 403)
      */
@@ -481,6 +481,7 @@ class FamilyController extends Controller
                     'first_name' => $user->first_name,
                     'last_name' => $user->last_name,
                     'email' => $user->email,
+                    'email_editable' => !$user->canLogIn(),
                     'phone' => $userInfos[self::KEY_PHONE] ?? null,
                     'address' => $userInfos[self::KEY_ADDRESS] ?? null,
                     'zipcode' => $userInfos[self::KEY_ZIPCODE] ?? null,
@@ -525,7 +526,8 @@ class FamilyController extends Controller
                 ];
             });
 
-        $comments = $family->comments()
+        $comments = auth()->user()->hasPermissionIn($family->school_id, 'comments.create')
+            ? $family->comments()
             ->with('user')
             ->orderBy('created_at')
             ->get()
@@ -537,7 +539,7 @@ class FamilyController extends Controller
                     'date' => $comment->created_at->format('d/m/Y'),
                     'created_at' => $comment->created_at
                 ];
-            });
+            }) : collect();
 
         return response()->json([
             'status' => 'success',
@@ -554,7 +556,10 @@ class FamilyController extends Controller
 
     public function addComment(Request $request, Family $family)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'comments.create')
+            || !auth()->user()->hasPermissionIn($family->school_id, 'comments.create')) {
+            return $this->denyFamilyAccess($family);
+        }
 
         $request->validate([
             'content' => 'required|string',
@@ -593,7 +598,7 @@ class FamilyController extends Controller
 
     public function addStudents(Request $request, Family $family)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'students.create')) return $this->denyFamilyAccess($family);
 
         $request->validate([
             'students' => 'required|array',
@@ -680,7 +685,7 @@ class FamilyController extends Controller
 
     public function updateStudent(Request $request, Family $family, User $student)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'students.update')) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
 
         $request->validate([
@@ -720,7 +725,7 @@ class FamilyController extends Controller
 
     public function deleteStudent(Family $family, User $student)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'students.delete')) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($student, $family, 'student')) return $deny;
 
         $now = now();
@@ -791,7 +796,7 @@ class FamilyController extends Controller
 
     public function addResponsible(Request $request, Family $family)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'families.update')) return $this->denyFamilyAccess($family);
 
         $request->validate([
             'user_id' => 'required|exists:users,id'
@@ -869,7 +874,7 @@ class FamilyController extends Controller
 
     public function addResponsibleToFamily(Family $family, Request $request)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'families.update')) return $this->denyFamilyAccess($family);
 
         $request->validate([
             'lastname' => 'required|string|max:255',
@@ -971,7 +976,7 @@ class FamilyController extends Controller
 
     public function updateResponsible(Family $family, User $responsible, Request $request)
     {
-        if (!self::callerCanAccessFamily($family, 'families.edit')) return $this->denyFamilyAccess($family);
+        if (!self::callerCanAccessFamily($family, 'families.update')) return $this->denyFamilyAccess($family);
         if ($deny = $this->ensureMemberOfFamily($responsible, $family, 'responsible')) return $deny;
 
         $request->validate([
@@ -1018,6 +1023,8 @@ class FamilyController extends Controller
             'gender.required_if' => 'Le genre est obligatoire pour les étudiants.',
             'gender.in' => 'Le genre doit être "M" (masculin) ou "F" (féminin).',
         ]);
+
+        \App\Support\AccountEmail::validateChange($responsible, $request->input('email'));
 
         DB::beginTransaction();
 

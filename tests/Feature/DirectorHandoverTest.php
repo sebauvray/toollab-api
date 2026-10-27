@@ -517,6 +517,22 @@ describe('acceptation', function () {
         expect(dhRoles($this->director, $this->school))->toBe(['registar']);
     });
 
+    it('conserve les rôles personnalisés de l\'ancien directeur', function (string $outgoing, array $expected) {
+        $custom = Role::create(['school_id' => $this->school->id, 'name' => 'Trésorier', 'slug' => 'tresorier']);
+        UserRole::create([
+            'user_id' => $this->director->id, 'role_id' => $custom->id, 'roleable_type' => 'school',
+            'roleable_id' => $this->school->id, 'accepted_at' => now(),
+        ]);
+        dhGrant($this->director, 'teacher', $this->school);
+
+        dhAcceptAsNewUser(dhInitiate($this->director, $this->school, 'nouveau@test.fr', $outgoing));
+
+        expect(dhRoles($this->director, $this->school))->toBe($expected);
+    })->with([
+        'devient admin' => ['admin', ['admin', 'teacher', 'tresorier']],
+        'quitte la direction' => ['none', ['teacher', 'tresorier']],
+    ]);
+
     it('réattribue un rôle précédemment supprimé (soft delete) sans violer la contrainte unique', function () {
         dhGrant($this->director, 'admin', $this->school)->delete();
         expect(UserRole::onlyTrashed()->where('user_id', $this->director->id)->count())->toBe(1);

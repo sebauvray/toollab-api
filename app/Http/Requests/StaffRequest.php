@@ -24,7 +24,9 @@ class StaffRequest extends FormRequest
         }
         $requestedRoles = array_values(array_filter(array_unique($requestedRoles)));
 
-        if (!$schoolId || !auth()->user()->hasPermissionIn((int) $schoolId, 'staff.manage')) {
+        // Inviter (nouvelle personne) ou attribuer des rôles (membre existant) :
+        // StaffController::createStaffUser départage selon le cas.
+        if (!$schoolId || !auth()->user()->hasPermissionIn((int) $schoolId, 'staff.invite', 'staff.roles')) {
             return false;
         }
 

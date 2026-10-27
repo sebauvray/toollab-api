@@ -70,6 +70,7 @@ beforeEach(function () {
  * {school} {year} {family} {classroom} {member} sont remplacés à l'exécution.
  */
 dataset('routes', [
+    // Gestion de l'établissement : directeur et administrateur.
     ['PUT', '/api/schools/{school}', ['director', 'admin']],
     ['POST', '/api/school-years', ['director', 'admin']],
     ['POST', '/api/school-years/{year}/close', ['director', 'admin']],
@@ -78,7 +79,6 @@ dataset('routes', [
     ['POST', '/api/classrooms/{classroom}/reconduct', ['director', 'admin']],
     ['GET', '/api/users/teachers', ['director', 'admin']],
     ['GET', '/api/users/school/{school}', ['director', 'admin']],
-    ['GET', '/api/users/classroom/{classroom}', ['director', 'admin']],
     ['GET', '/api/users/{member}', ['director', 'admin']],
     ['GET', '/api/users/{member}/roles', ['director', 'admin']],
     ['POST', '/api/users/add-role', ['director', 'admin']],
