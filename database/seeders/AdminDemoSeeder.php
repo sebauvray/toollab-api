@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Services\SchoolRoleProvisioner;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -120,6 +121,9 @@ class AdminDemoSeeder extends Seeder
                 'enrollment_date' => $created, 'created_at' => $created, 'updated_at' => $created,
             ]);
         }
+
+        // Comme DatabaseSeeder : rôles propres à l'école, staff raccroché dessus.
+        app(SchoolRoleProvisioner::class)->provision($schoolId);
     }
 
     /** Un ou deux responsables par famille, au nom de l'élève, coordonnées comprises. */
