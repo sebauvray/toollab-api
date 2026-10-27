@@ -8,8 +8,11 @@ use Illuminate\Database\Eloquent\Scope;
 
 /**
  * Filtre toutes les requêtes par school_year_id = currentSchoolYearId().
- * Si aucune année courante n'est résolue, on laisse passer (pas de fail-closed)
- * car le scope BelongsToSchoolScope filtre déjà par école.
+ * Sans année courante mais avec une école courante (routes école hors
+ * middleware schoolyear), on se rabat sur les années de cette école : ces
+ * modèles n'ont pas de school_id, sans ce repli ils seraient lisibles
+ * toutes écoles confondues.
+ * Sans aucun contexte (console, jobs en file), aucun filtre n'est appliqué.
  * Bypass volontaire via ::withoutGlobalScope(BelongsToSchoolYearScope::class).
  */
 class BelongsToSchoolYearScope implements Scope
@@ -19,9 +22,11 @@ class BelongsToSchoolYearScope implements Scope
         $yearId = currentSchoolYearId();
 
         if ($yearId === null) {
+            (new BelongsToCurrentSchoolYearsScope)->apply($builder, $model);
+
             return;
         }
 
-        $builder->where($model->getTable() . '.school_year_id', $yearId);
+        $builder->where($model->getTable().'.school_year_id', $yearId);
     }
 }

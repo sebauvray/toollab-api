@@ -1,0 +1,78 @@
+name: Tests
+
+# Lance Pint et la suite Pest sur chaque push et chaque PR.
+# Aussi appelé par build-push.yml : aucune image n'est publiée si ce
+# workflow échoue.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        # Même version que docker-compose.yml
+        image: mariadb:11.4.5
+        env:
+          MARIADB_DATABASE: testing
+          MARIADB_USER: sail
+          MARIADB_PASSWORD: password
+          MARIADB_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Historique complet : Pint compare la branche à main
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # Même version que l'image de prod (docker/php/Dockerfile)
+          php-version: "8.2"
+          extensions: pdo_mysql, mbstring, exif, pcntl, bcmath, gd, zip
+          coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Dépendances
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Environnement
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # Le code existant n'est pas encore aligné sur Pint : on ne contrôle que
+      # les fichiers modifiés depuis main, pour ne pas bloquer sur l'historique.
+      - name: Pint (fichiers modifiés)
+        if: github.ref != 'refs/heads/main'
+        run: |
+          git fetch origin main --depth=1 || true
+          ./vendor/bin/pint --test --diff=origin/main
+
+      - name: Pest
+        run: php artisan test

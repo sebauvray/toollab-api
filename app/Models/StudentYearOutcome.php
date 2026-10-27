@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\BelongsToCurrentSchoolYearsScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -24,6 +25,15 @@ class StudentYearOutcome extends Model
     ];
 
     /**
+     * Pas de school_id : on restreint aux années de l'école courante. Pas de
+     * scope par année, les décisions des années passées restent consultables.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new BelongsToCurrentSchoolYearsScope);
+    }
+
+    /**
      * Retire les décisions qui accompagnaient ces inscriptions.
      *
      * La décision suit l'inscription : dès qu'un élève quitte une classe sur
@@ -32,8 +42,8 @@ class StudentYearOutcome extends Model
      * fausse le compteur de /decisions, et RESSURGIT telle quelle si l'élève
      * est réinscrit plus tard dans la même classe.
      *
-     * Le modèle n'a aucun global scope : l'année et la classe sont filtrées à
-     * la main. Seule l'année COURANTE est touchée — l'historique des années
+     * Le global scope ne filtre que l'école : l'année et la classe sont
+     * filtrées à la main. Seule l'année COURANTE est touchée — l'historique des années
      * clôturées ne bouge pas.
      */
     public static function forgetForEnrollments(array $studentIds, array $classroomIds): int
