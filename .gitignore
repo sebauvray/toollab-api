@@ -20,3 +20,6 @@ yarn-error.log
 /.idea
 /.vscode
 /.zed
+
+# Fichiers système macOS
+.DS_Store
