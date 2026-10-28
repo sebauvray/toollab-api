@@ -138,6 +138,7 @@ class PaiementController extends Controller
             ]);
         } catch (\Exception $e) {
             report($e);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la récupération des détails de paiement',
@@ -231,32 +232,40 @@ class PaiementController extends Controller
         $request->validate($rules);
 
         try {
-            $details = $this->paiementService->getDetailsPaiement($family);
-            $previousResteAPayer = $details['reste_a_payer'];
-            $nouveauMontantPaye = $details['montant_paye'] - $ligne->montant + $request->montant;
+            // Même verrou que ajouterLigne : sans lui, deux modifications
+            // simultanées lisent le même total et dépassent le montant dû.
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $family, $ligne) {
+                Family::lockForUpdate()->find($family->id);
+                $ligne->refresh();
 
-            if ($nouveauMontantPaye > $details['montant_total']) {
+                $details = $this->paiementService->getDetailsPaiement($family);
+                $previousResteAPayer = $details['reste_a_payer'];
+                $nouveauMontantPaye = $details['montant_paye'] - $ligne->montant + $request->montant;
+
+                if ($nouveauMontantPaye > $details['montant_total']) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Le montant total payé ne peut pas dépasser le montant dû',
+                    ], 422);
+                }
+
+                $ligne = $this->paiementService->modifierLignePaiement($ligne, $request->all());
+
+                CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer)->afterCommit();
+
                 return response()->json([
-                    'status' => 'error',
-                    'message' => 'Le montant total payé ne peut pas dépasser le montant dû',
-                ], 422);
-            }
-
-            $ligne = $this->paiementService->modifierLignePaiement($ligne, $request->all());
-
-            CheckPaymentCompletionJob::dispatch($family, $previousResteAPayer)->afterCommit();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Paiement modifié avec succès',
-                'data' => [
-                    'ligne' => $ligne,
-                    'nouveau_total' => $nouveauMontantPaye,
-                    'reste_a_payer' => $details['montant_total'] - $nouveauMontantPaye,
-                ],
-            ]);
+                    'status' => 'success',
+                    'message' => 'Paiement modifié avec succès',
+                    'data' => [
+                        'ligne' => $ligne,
+                        'nouveau_total' => $nouveauMontantPaye,
+                        'reste_a_payer' => $details['montant_total'] - $nouveauMontantPaye,
+                    ],
+                ]);
+            });
         } catch (\Exception $e) {
             report($e);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la modification du paiement',
@@ -298,6 +307,7 @@ class PaiementController extends Controller
             ]);
         } catch (\Exception $e) {
             report($e);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la suppression du paiement',
