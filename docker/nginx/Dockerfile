@@ -1,5 +1,5 @@
 # Contexte de build = racine du repo (permet de baker public/ dans le stage prod).
-FROM fholzer/nginx-brotli:v1.26.2 as base
+FROM fholzer/nginx-brotli:v1.28.3@sha256:390776a6f523c1ece8634e718beb2d189f3d9baedcaf7ef153a9736effc9f9ae AS base
 
 
 FROM base AS dev
